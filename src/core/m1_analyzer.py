@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def _make_client():
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return OpenAI(
+        api_key=os.getenv("GROQ_API_KEY"),
+        base_url="https://api.groq.com/openai/v1"
+    )
 
 try:
     client = _make_client()
@@ -59,7 +62,7 @@ def detect_ui_patterns(components: list, potential_issues: list) -> list:
 
 def analyze_code(source_code: str, task: str) -> dict:
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": M1_SYSTEM_PROMPT},
             {"role": "user", "content": f"태스크: {task}\n\n코드:\n{source_code}"}

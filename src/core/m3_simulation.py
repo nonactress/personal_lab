@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def _make_client():
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return OpenAI(
+        api_key=os.getenv("GROQ_API_KEY"),
+        base_url="https://api.groq.com/openai/v1"
+    )
 
 try:
     client = _make_client()
@@ -63,7 +66,7 @@ UI 요소:
 def run_simulation(ui_map: dict, constraints: str, research_context: str, task: str) -> dict:
     messages = build_simulation_prompt(constraints, research_context, ui_map, task)
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         response_format={"type": "json_object"}
     )

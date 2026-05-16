@@ -41,25 +41,32 @@ async def call_analysis(files, persona_desc):
             
             if response.status_code == 200:
                 res = response.json()
-                
-                # 결과 포맷팅
-                score_val = f"UX Confusion Index: {res['score']}"
-                drop_off = f"### ⚠️ 사용자 이탈 지점: {res['drop_off_point']}"
-                
-                timeline_html = "<ul>"
-                for item in res['timeline']:
-                    timeline_html += f"<li><b>[{item['file']} : {item['line']}라인]</b> {item['thought']}</li>"
-                timeline_html += "</ul>"
-                
-                fix_prompts_val = "\n\n".join(res['fix_prompts'])
-                
-                # 화면 3: 결과 표시
+
+                score_val = f"혼란 지수: {res['confusion_score']} / 100"
+                cohort_framing = res.get("cohort_framing", "")
+                abandoned_str = "⚠️ 이탈 예측됨" if res.get("abandoned") else "✅ 완료 가능"
+
+                think_aloud_html = f"<blockquote style='border-left:4px solid #f59e0b; padding-left:12px; color:#374151;'>{res.get('think_aloud', '')}</blockquote>"
+
+                top3_html = "<ul>"
+                for item in res.get("top3", []):
+                    severity_pct = int(item.get("severity", 0) * 100)
+                    top3_html += (
+                        f"<li><b>[line {item.get('line_number', '?')}]</b> "
+                        f"{item.get('reason', '')} "
+                        f"<span style='color:#6b7280; font-size:0.85em;'>({item.get('evidence', '')})</span>"
+                        f" — 심각도 {severity_pct}%</li>"
+                    )
+                top3_html += "</ul>"
+
+                fix_prompts_val = "\n\n".join(res.get("fix_prompts", []))
+
                 yield {
                     progress_screen: gr.update(visible=False),
                     result_screen: gr.update(visible=True),
                     score_display: score_val,
-                    drop_off_display: drop_off,
-                    timeline_display: timeline_html,
+                    drop_off_display: f"### {abandoned_str}\n{cohort_framing}",
+                    timeline_display: think_aloud_html + top3_html,
                     fix_prompts: fix_prompts_val
                 }
             else:

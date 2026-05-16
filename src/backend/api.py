@@ -2,7 +2,7 @@ import io
 import zipfile
 from typing import List
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from src.core.logic import run_mock_pipeline
+from src.core.logic import run_pipeline
 
 app = FastAPI(title="PersonaLab API")
 
@@ -47,7 +47,7 @@ async def analyze_code(
         if not codebase:
             raise HTTPException(status_code=400, detail="분석 가능한 코드가 없습니다.")
 
-        result = run_mock_pipeline(codebase, persona_desc)
+        result = run_pipeline(codebase, persona_desc)
         return result
 
     except Exception as e:

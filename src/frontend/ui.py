@@ -84,12 +84,17 @@ async def call_analysis(files, persona_desc):
     yield {
         input_screen: gr.update(visible=False),
         progress_screen: gr.update(visible=True),
-        status_text: "🧬 20대 대학생 코호트 페르소나 구성 중..."
+        status_text: "📂 1/4 — 코드 파싱 중..."
     }
     await asyncio.sleep(1)
 
     yield {
-        status_text: "🔍 코드 분석 및 UX 시뮬레이션 진행 중..."
+        status_text: "🧬 2/4 — 페르소나 생성 중..."
+    }
+    await asyncio.sleep(0.5)
+
+    yield {
+        status_text: "🔍 3/4 — UX 시뮬레이션 진행 중..."
     }
 
     try:
@@ -102,12 +107,20 @@ async def call_analysis(files, persona_desc):
 
             response = await client.post(BACKEND_URL, data=data, files=upload_files, timeout=120.0)
 
+            yield {
+                status_text: "📊 4/4 — 리포트 생성 중..."
+            }
+
             if response.status_code == 200:
                 res = response.json()
 
                 score = res["confusion_score"]
-                score_color = "#ef4444" if score >= 70 else "#f59e0b" if score >= 40 else "#10b981"
-                score_val = f"혼란 지수: {score} / 100"
+                if score >= 70:
+                    score_val = f"혼란 지수: {score} / 100  🔴 높음 — 즉시 개선 필요 (권장: 40점 이하)"
+                elif score >= 40:
+                    score_val = f"혼란 지수: {score} / 100  🟡 주의 — 개선 권장 (권장: 40점 이하)"
+                else:
+                    score_val = f"혼란 지수: {score} / 100  ✅ 양호"
 
                 abandoned_str = "⚠️ 이탈 예측됨" if res.get("abandoned") else "✅ 완료 가능"
                 cohort_framing = res.get("cohort_framing", "")
@@ -164,13 +177,13 @@ async def call_analysis(files, persona_desc):
                 yield {
                     progress_screen: gr.update(visible=False),
                     input_screen: gr.update(visible=True),
-                    error_msg: f"Backend Error: {response.text}"
+                    error_msg: "⚠️ 분석 중 오류가 발생했어요. 업로드한 파일 형식을 확인하거나 잠시 후 다시 시도해주세요."
                 }
     except Exception as e:
         yield {
             progress_screen: gr.update(visible=False),
             input_screen: gr.update(visible=True),
-            error_msg: f"Connection Error: {str(e)}"
+            error_msg: "⚠️ 서버에 연결할 수 없어요. 백엔드가 실행 중인지 확인해주세요. (http://localhost:8000)"
         }
 
 
@@ -184,14 +197,16 @@ def go_back():
 
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🧪 PersonaLab: UX Linter for Vibe Coders")
+    gr.Markdown("*당신의 코드를 실제 유저 눈으로 분석합니다 — 업로드하면 AI가 타겟 사용자 입장에서 UX 문제를 찾아드려요.*")
 
     with gr.Column(visible=True) as input_screen:
         gr.Markdown("### 📂 Step 1: 프론트엔드 코드 업로드 및 페르소나 설정")
-        file_input = gr.File(label="프로젝트 소스코드 (ZIP 또는 다중 파일)", file_count="multiple")
+        file_input = gr.File(label="프로젝트 소스코드 (ZIP 또는 .tsx/.jsx/.html/.vue 다중 선택)", file_count="multiple")
         persona_input = gr.Textbox(
-            label="페르소나 설명",
-            placeholder="예: 20대 대학생",
-            lines=2
+            label="타겟 사용자 설명",
+            placeholder="예: 디지털 리터러시 낮은 50대 직장인 / 앱을 처음 쓰는 20대 대학생 / 바쁜 30대 프리랜서",
+            lines=2,
+            info="분석할 가상 사용자를 자유롭게 묘사해주세요. 자세할수록 정확도가 높아집니다."
         )
         error_msg = gr.Markdown("", label="Error")
         analyze_btn = gr.Button("UX 분석 시작", variant="primary")
@@ -203,6 +218,7 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
 
     with gr.Column(visible=False) as result_screen:
         gr.Markdown("### 📊 Step 3: UX 분석 결과")
+
         with gr.Row():
             with gr.Column(scale=1):
                 score_display = gr.Label(label="전체 혼란 지수")
@@ -210,11 +226,13 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             with gr.Column(scale=1):
                 ui_preview_display = gr.HTML()
 
-        timeline_display = gr.HTML()
+        gr.Markdown("### 🛠️ Vibe Coding Fix Prompts")
+        gr.Markdown("*아래 프롬프트를 Cursor / v0 / Claude에 붙여넣으세요*")
+        fix_prompts = gr.TextArea(label="", lines=8, interactive=False)
+        copy_btn = gr.Button("📋 프롬프트 복사", variant="primary")
 
-        with gr.Accordion("🛠️ Vibe Coding Fix Prompts", open=True):
-            fix_prompts = gr.TextArea(label="복사하여 Cursor/v0에 붙여넣으세요", lines=10, interactive=False)
-            copy_btn = gr.Button("프롬프트 복사")
+        with gr.Accordion("🔍 상세 분석 보기 (Think-aloud / 코드 이슈)", open=False):
+            timeline_display = gr.HTML()
 
         back_btn = gr.Button("새로운 분석 시작")
 

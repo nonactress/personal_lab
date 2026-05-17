@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PersonaLab — UX Linter for Vibe Coders</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body class="min-h-screen font-sans antialiased" x-data="personaApp">
+
+  <!-- ═══════════════════════════════════════ INPUT SCREEN -->
+  <div x-show="screen === 'input'"
+       x-transition:enter="transition ease-out duration-300"
+       x-transition:enter-start="opacity-0 translate-y-1"
+       x-transition:enter-end="opacity-100 translate-y-0"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="min-h-screen flex flex-col items-center justify-center px-4 py-16">
+
+    <div class="w-full max-w-xl">
+
+      <!-- Wordmark -->
+      <div class="text-center mb-10">
+        <div class="font-mono text-xs tracking-widest uppercase mb-4" style="color:#3B82F6">PersonaLab</div>
+        <h1 class="text-3xl font-bold mb-3" style="color:#F1F5F9">UX Linter for Vibe Coders</h1>
+        <p class="text-sm leading-relaxed" style="color:#64748B">
+          당신의 코드를 실제 유저 눈으로 분석합니다<br>
+          AI가 타겟 사용자 입장에서 UX 문제를 찾아드려요
+        </p>
+      </div>
+
+      <!-- Error -->
+      <div x-show="error" x-text="error"
+           class="mb-4 px-4 py-3 rounded-xl text-sm"
+           style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:#f87171"></div>
+
+      <!-- Upload zone -->
+      <div class="mb-4"
+           @dragover.prevent="dragging = true"
+           @dragleave.prevent="dragging = false"
+           @drop.prevent="handleDrop($event)">
+        <input type="file" x-ref="fileInput" multiple
+               accept=".tsx,.jsx,.html,.vue,.js,.ts,.zip"
+               @change="handleFiles($event)" class="hidden">
+        <div @click="$refs.fileInput.click()"
+             class="upload-zone"
+             :class="dragging && 'drag-over'">
+          <div class="text-3xl mb-3">📂</div>
+          <p class="text-sm font-medium mb-1" style="color:#CBD5E1">파일을 드래그하거나 클릭하여 업로드</p>
+          <p class="text-xs" style="color:#475569">.tsx · .jsx · .html · .vue · .js · .ts · .zip</p>
+        </div>
+      </div>
+
+      <!-- File list -->
+      <div x-show="files.length" class="mb-4 space-y-1.5">
+        <template x-for="(file, i) in files" :key="i">
+          <div class="flex items-center justify-between px-3 py-2 rounded-lg"
+               style="background:#1E293B;border:1px solid rgba(148,163,184,0.12)">
+            <span class="font-mono text-xs truncate" style="color:#94A3B8" x-text="file.name"></span>
+            <button @click="removeFile(i)"
+                    class="ml-3 text-xs transition-colors"
+                    style="color:#475569"
+                    onmouseover="this.style.color='#f87171'"
+                    onmouseout="this.style.color='#475569'">✕</button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Persona input -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-1.5" style="color:#94A3B8">
+          타겟 사용자 설명
+          <span class="ml-2 text-xs font-normal" style="color:#475569">자세할수록 정확도가 높아집니다</span>
+        </label>
+        <textarea x-model="personaDesc" rows="3"
+                  placeholder="예: 디지털 리터러시 낮은 50대 직장인 / 앱을 처음 쓰는 20대 대학생 / 바쁜 30대 프리랜서"
+                  class="w-full px-4 py-3 rounded-xl text-sm resize-none outline-none transition-all duration-200"
+                  style="background:#1E293B;border:1px solid rgba(148,163,184,0.2);color:#F1F5F9"
+                  onfocus="this.style.borderColor='#3B82F6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.12)'"
+                  onblur="this.style.borderColor='rgba(148,163,184,0.2)';this.style.boxShadow='none'"></textarea>
+      </div>
+
+      <!-- CTA -->
+      <button @click="analyze()" class="btn-primary">UX 분석 시작 →</button>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════ PROGRESS SCREEN -->
+  <div x-show="screen === 'progress'"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="min-h-screen flex flex-col items-center justify-center px-4">
+
+    <div class="w-full max-w-md text-center">
+      <div class="font-mono text-xs tracking-widest uppercase mb-12" style="color:#3B82F6">PersonaLab</div>
+
+      <!-- Step indicator -->
+      <div class="flex items-end justify-center mb-10">
+        <template x-for="(step, i) in steps" :key="i">
+          <div class="flex items-center">
+            <div class="flex flex-col items-center gap-1.5">
+              <div class="step-dot"
+                   :class="statusStep === i+1 ? 'active' : statusStep > i+1 ? 'done' : 'pending'">
+                <span x-show="statusStep > i+1">✓</span>
+                <span x-show="statusStep <= i+1" x-text="i+1"></span>
+              </div>
+              <div class="text-xs whitespace-nowrap" style="color:#475569"
+                   x-text="step.icon + ' ' + step.label"></div>
+            </div>
+            <div x-show="i < steps.length - 1"
+                 class="step-line mb-5"
+                 :class="statusStep > i+1 ? 'done' : 'pending'"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Status text -->
+      <p class="text-sm mb-4" style="color:#64748B"
+         x-text="(steps[statusStep-1]?.icon || '') + ' ' + (steps[statusStep-1]?.label || '') + ' 중...'"></p>
+
+      <!-- Bounce dots -->
+      <div class="flex justify-center gap-1.5">
+        <div class="bounce-dot" style="animation-delay:0ms"></div>
+        <div class="bounce-dot" style="animation-delay:150ms"></div>
+        <div class="bounce-dot" style="animation-delay:300ms"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════ RESULT SCREEN -->
+  <div x-show="screen === 'result'"
+       x-transition:enter="transition ease-out duration-300"
+       x-transition:enter-start="opacity-0 translate-y-2"
+       x-transition:enter-end="opacity-100 translate-y-0"
+       class="min-h-screen px-4 py-10">
+
+    <div class="max-w-2xl mx-auto">
+
+      <!-- Nav bar -->
+      <div class="flex items-center justify-between mb-8">
+        <div class="font-mono text-xs tracking-widest uppercase" style="color:#3B82F6">PersonaLab — 분석 결과</div>
+        <button @click="reset()"
+                class="text-xs transition-colors"
+                style="color:#475569"
+                onmouseover="this.style.color='#94A3B8'"
+                onmouseout="this.style.color='#475569'">← 새 분석</button>
+      </div>
+
+      <!-- Risk banner -->
+      <div x-show="result" class="flex items-center gap-4 px-5 py-4 rounded-xl mb-6"
+           :style="`background:${riskConfig.bg};border:1px solid ${riskConfig.border}`">
+        <div class="text-2xl flex-shrink-0" x-text="riskConfig.icon"></div>
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-base" :style="`color:${riskConfig.color}`"
+               x-text="result?.risk_label"></div>
+          <div class="text-xs mt-0.5" style="color:#64748B"
+               x-text="result?.abandoned ? '⚠️ 이탈 예측됨' : '✅ 완료 가능'"></div>
+        </div>
+        <div class="flex gap-2 flex-shrink-0">
+          <span x-show="result?.issues_summary?.critical"
+                class="px-2 py-1 rounded-md text-xs font-mono"
+                style="background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.2)"
+                x-text="`심각 ${result?.issues_summary?.critical}`"></span>
+          <span x-show="result?.issues_summary?.warning"
+                class="px-2 py-1 rounded-md text-xs font-mono"
+                style="background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.2)"
+                x-text="`경고 ${result?.issues_summary?.warning}`"></span>
+          <span x-show="result?.issues_summary?.info"
+                class="px-2 py-1 rounded-md text-xs font-mono"
+                style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.2)"
+                x-text="`정보 ${result?.issues_summary?.info}`"></span>
+        </div>
+      </div>
+
+      <!-- Bias gap -->
+      <div x-show="result?.developer_assumption" class="mb-6">
+        <div class="font-mono text-xs tracking-wider uppercase mb-3" style="color:#475569">
+          개발자 바이어스 갭 — H1
+        </div>
+        <div class="bias-grid">
+          <div class="bias-cell bias-cell-dev">
+            <div class="bias-tag" style="color:#64748B">개발자가 예상한 행동</div>
+            <p class="text-sm italic leading-relaxed" style="color:#64748B"
+               x-text='`"${result?.developer_assumption || ""}"`'></p>
+          </div>
+          <div class="bias-cell bias-cell-real">
+            <div class="bias-tag" style="color:#60a5fa">실제 페르소나 반응</div>
+            <p class="text-sm italic leading-relaxed" style="color:#CBD5E1"
+               x-text='`"${thinkAloudFirstSentence}"`'></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Think-aloud -->
+      <div class="think-aloud-box mb-6">
+        <div class="font-mono text-xs mb-2" style="color:#60a5fa">💬 페르소나 Think-aloud</div>
+        <p class="text-sm leading-relaxed italic" style="color:#CBD5E1"
+           x-text="result?.think_aloud"></p>
+        <p x-show="result?.dropout_point"
+           class="mt-2 text-xs" style="color:#f87171"
+           x-text="`이탈 지점: ${result?.dropout_point}`"></p>
+      </div>
+
+      <!-- Fix Prompts -->
+      <div class="mb-6">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="font-semibold text-base" style="color:#F1F5F9">🛠 Vibe Coding Fix Prompts</div>
+            <div class="text-xs mt-0.5" style="color:#475569">Cursor / v0 / Claude에 붙여넣으세요</div>
+          </div>
+          <button @click="copyPrompts()"
+                  class="btn-copy"
+                  :class="copied && 'copied'">
+            <span x-text="copied ? '✓ 복사됨' : '📋 복사'"></span>
+          </button>
+        </div>
+        <textarea class="fix-textarea" readonly rows="8"
+                  :value="(result?.fix_prompts || []).join('\n\n---\n\n')"></textarea>
+      </div>
+
+      <!-- Detail collapsible -->
+      <div class="mb-8">
+        <button class="detail-toggle" @click="detailOpen = !detailOpen">
+          <span style="color:#94A3B8">🔍 코드 이슈 상세 / UI 미리보기</span>
+          <span class="font-mono text-xs" style="color:#475569"
+                x-text="detailOpen ? '▲ 접기' : '▼ 펼치기'"></span>
+        </button>
+
+        <div x-show="detailOpen"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 -translate-y-1"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             class="mt-3 space-y-4">
+
+          <!-- Issue cards -->
+          <div x-html="buildIssueCards()"></div>
+
+          <!-- Annotated code -->
+          <div x-html="buildAnnotatedCode()"></div>
+
+          <!-- UI preview iframe -->
+          <div x-show="result?.preview_html"
+               class="rounded-xl overflow-hidden"
+               style="border:1px solid rgba(148,163,184,0.12)">
+            <div class="px-4 py-2 font-mono text-xs"
+                 style="background:#1E293B;border-bottom:1px solid rgba(148,163,184,0.08);color:#475569">
+              📱 UI 미리보기 (375px 기준)
+            </div>
+            <iframe :srcdoc="result?.preview_html"
+                    style="width:100%;height:520px;border:none;background:#fff;display:block"></iframe>
+          </div>
+        </div>
+      </div>
+
+      <!-- Back -->
+      <button @click="reset()" class="btn-ghost w-full">새로운 분석 시작</button>
+    </div>
+  </div>
+
+</body>
+</html>

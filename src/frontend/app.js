@@ -152,6 +152,10 @@ document.addEventListener('alpine:init', () => {
     detailOpen: false,
     statusStep: 0,
     result: null,
+    characterState: 'idle',
+    personaVariant: 'default',
+    personaMinimized: false,
+    _thinkInterval: null,
 
     steps: [
       { label: '코드 파싱', icon: '📂' },
@@ -159,6 +163,30 @@ document.addEventListener('alpine:init', () => {
       { label: 'UX 시뮬레이션', icon: '🔍' },
       { label: '리포트 생성', icon: '📊' },
     ],
+
+    init() {
+      this.$watch('personaDesc', (val) => {
+        if (this.screen === 'input') {
+          this.personaVariant = this.getPersonaVariant(val);
+        }
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (this.screen !== 'input') return;
+        const wrap = this.$el.querySelector('.persona-svg-wrap');
+        if (!wrap) return;
+        const rect = wrap.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
+        const dist = 2.5;
+        const ox = +(Math.cos(angle) * dist).toFixed(1);
+        const oy = +(Math.sin(angle) * dist).toFixed(1);
+        wrap.querySelectorAll('.pupil-l, .pupil-r').forEach(p => {
+          p.style.transform = `translate(${ox}px, ${oy}px)`;
+        });
+      });
+    },
 
     handleFiles(e) {
       this.addFiles(Array.from(e.target.files || []));
@@ -179,6 +207,24 @@ document.addEventListener('alpine:init', () => {
 
     removeFile(i) {
       this.files = this.files.filter((_, idx) => idx !== i);
+    },
+
+    getPersonaVariant(desc) {
+      if (/50대|중년|장년/.test(desc)) return 'senior';
+      if (/바쁜|직장인|프리랜서/.test(desc)) return 'busy';
+      return 'default';
+    },
+
+    startThinking() {
+      this.characterState = 'thinking';
+      this._thinkInterval = setInterval(() => {
+        this.characterState = this.characterState === 'thinking' ? 'scanning' : 'thinking';
+      }, 1500);
+    },
+
+    stopThinking() {
+      clearInterval(this._thinkInterval);
+      this._thinkInterval = null;
     },
 
     async analyze() {
@@ -241,6 +287,25 @@ document.addEventListener('alpine:init', () => {
       this.files = [];
       this.error = '';
       this.personaDesc = '';
+    },
+
+    get currentPersonaSvg() {
+      if (this.screen === 'result' && this.result) {
+        return PERSONA_SVGS[this.result.risk_level] || PERSONA_SVGS.default;
+      }
+      if (this.screen === 'progress') {
+        return PERSONA_SVGS[this.characterState] || PERSONA_SVGS.thinking;
+      }
+      return PERSONA_SVGS[this.personaVariant] || PERSONA_SVGS.default;
+    },
+
+    get personaLabel() {
+      if (this.screen === 'progress') return '분석 중...';
+      if (this.screen === 'result' && this.result) {
+        return this.result.risk_label || '분석 완료';
+      }
+      if (!this.personaDesc.trim()) return '페르소나 대기 중';
+      return this.personaDesc.trim().split(/\s+/).slice(0, 4).join(' ');
     },
 
     get riskConfig() {

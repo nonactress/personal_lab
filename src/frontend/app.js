@@ -331,10 +331,46 @@ document.addEventListener('alpine:init', () => {
 
     physX: 100,
     physY: 100,
-    physVX: 0,
-    physVY: 0,
-    physState: 'wander',
-    physTarget: { x: 200, y: 300 },
+
+    // animation state machine (non-reactive private vars)
+    _animState: 'walk',
+    _facingLeft: false,
+    _walkPhase: 0,
+    _bobY: 0,
+    _scaleX: 1,
+    _scaleY: 1,
+
+    // jump sub-state
+    _jumpVY: 0,
+    _jumpY: 0,
+    _jumpPhase: 'none',
+    _jumpPhaseTimer: 0,
+
+    // sit sub-state
+    _sitProgress: 0,
+    _sitTimer: 0,
+
+    // run timer
+    _runTimer: 0,
+
+    // eye system
+    _eyeOX: 1,
+    _eyeOY: 0,
+    _eyeTargetX: 1,
+    _eyeTargetY: 0,
+    _eyeTimer: 0,
+    _blinkScale: 1,
+    _blinkTimer: 0,
+
+    // mouse position
+    _mouseX: 0,
+    _mouseY: 0,
+
+    // throw velocity (set by onPersonaMousedown)
+    _thrownVX: 0,
+    _thrownVY: 0,
+
+    // drag/throw infrastructure
     _animFrame: null,
     _idleTimer: null,
     _dragOffset: { x: 0, y: 0 },
@@ -350,8 +386,16 @@ document.addEventListener('alpine:init', () => {
     init() {
       this.physX = window.innerWidth * 0.8;
       this.physY = window.innerHeight * 0.7;
-      this._pickWanderTarget();
+      this._mouseX = window.innerWidth * 0.5;
+      this._mouseY = window.innerHeight * 0.5;
+
+      window.addEventListener('mousemove', (e) => {
+        this._mouseX = e.clientX;
+        this._mouseY = Math.min(e.clientY, this._maxY() + 39);
+      });
+
       this._startPhysics();
+      this._animState = 'walk';
 
       this._featureFetch = debounce(async (val) => {
         this.personaFeatures = extractFeatures(val);
@@ -368,22 +412,6 @@ document.addEventListener('alpine:init', () => {
 
       this.$watch('personaDesc', (val) => {
         if (this.screen === 'input') this._featureFetch(val);
-      });
-
-      document.addEventListener('mousemove', (e) => {
-        if (this.screen !== 'input') return;
-        const wrap = this.$el.querySelector('.persona-svg-wrap');
-        if (!wrap) return;
-        const rect = wrap.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
-        const dist = 2.5;
-        const ox = +(Math.cos(angle) * dist).toFixed(1);
-        const oy = +(Math.sin(angle) * dist).toFixed(1);
-        wrap.querySelectorAll('.pupil-l, .pupil-r').forEach(p => {
-          p.style.transform = `translate(${ox}px, ${oy}px)`;
-        });
       });
     },
 
@@ -408,67 +436,255 @@ document.addEventListener('alpine:init', () => {
       this.files = this.files.filter((_, idx) => idx !== i);
     },
 
-    _pickWanderTarget() {
-      const W = 96, H = 140;
-      this.physTarget = {
-        x: Math.random() * (window.innerWidth - W),
-        y: Math.random() * (window.innerHeight - H),
-      };
-    },
+    _maxX() { return window.innerWidth  - 66; },
+    _maxY() { return window.innerHeight - 78 - 80; },
 
-    _scheduleWander() {
+    _scheduleIdle(delay) {
       clearTimeout(this._idleTimer);
       this._idleTimer = setTimeout(() => {
-        this._pickWanderTarget();
-        this.physState = 'wander';
-      }, 800 + Math.random() * 2400);
+        const roll = Math.random();
+        if (roll < 0.20) {
+          this._startJump();
+        } else if (roll < 0.35) {
+          this._startSit();
+        } else {
+          this._animState = 'walk';
+        }
+      }, delay != null ? delay : 600 + Math.random() * 1400);
+    },
+
+    _startJump() {
+      this._animState = 'jump';
+      this._jumpPhase = 'anticipate';
+      this._jumpPhaseTimer = 0;
+      this._jumpY = 0;
+      this._jumpVY = 0;
+    },
+
+    _startSit() {
+      this._animState = 'sit';
+      this._sitProgress = 0;
+      this._sitTimer = 0;
     },
 
     _startPhysics() {
-      const GRAVITY = 0.45;
-      const DAMPING = 0.52;
-      const FRICTION = 0.96;
-      const SPEED = 1.8;
-      const W = 96, H = 140;
+      const GRAVITY = 0.45, DAMPING = 0.52, FRICTION = 0.96;
+      const WALK_SPEED = 1.4, RUN_SPEED = 3.2;
+      const W = 66, H = 78;
+      let lastTime = 0;
 
-      const loop = () => {
-        if (this.physState === 'thrown') {
-          this.physVY += GRAVITY;
-          this.physX += this.physVX;
-          this.physY += this.physVY;
+      const tickWalk = (dt) => {
+        const tx = Math.max(0, Math.min(this._maxX(), this._mouseX - W / 2));
+        const ty = Math.max(0, Math.min(this._maxY(), this._mouseY - H / 2));
+        const dx = tx - this.physX, dy = ty - this.physY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 8) {
+          this._animState = 'idle';
+          this._bobY = 0; this._scaleX = 1; this._scaleY = 1;
+          this._scheduleIdle();
+          return;
+        }
+        const speed = WALK_SPEED * dt;
+        this.physX += (dx / dist) * speed;
+        this.physY += (dy / dist) * speed;
+        this._facingLeft = dx < 0;
+        this._walkPhase = (this._walkPhase + 0.06 * dt) % 1;
+        const bob = Math.sin(this._walkPhase * Math.PI * 2);
+        this._bobY = bob * 3;
+        this._scaleX = 1 + Math.abs(bob) * 0.04;
+        this._scaleY = 1 - Math.abs(bob) * 0.04;
+        this._eyeTargetX = this._facingLeft ? -1 : 1;
+      };
 
-          const maxX = window.innerWidth - W;
-          const maxY = window.innerHeight - H;
+      const tickIdle = (dt) => {
+        this._bobY = Math.sin(Date.now() / 900) * 1.5;
+        this._scaleX = 1; this._scaleY = 1;
+        const dx = this._mouseX - W / 2 - this.physX;
+        const dy = this._mouseY - H / 2 - this.physY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 40) {
+          clearTimeout(this._idleTimer);
+          this._animState = 'walk';
+        }
+      };
 
-          if (this.physY >= maxY) {
-            this.physY = maxY;
-            this.physVY = -Math.abs(this.physVY) * DAMPING;
-            this.physVX *= FRICTION;
-            if (Math.abs(this.physVY) < 1) {
-              this.physVY = 0;
-              if (Math.abs(this.physVX) < 0.5) {
-                this.physVX = 0;
-                this.physState = 'idle';
-                this._scheduleWander();
-              }
-            }
+      const tickJump = (dt) => {
+        this._jumpPhaseTimer += dt;
+        if (this._jumpPhase === 'anticipate') {
+          const a = Math.min(this._jumpPhaseTimer / 15, 1);
+          this._scaleX = 1 + a * 0.18; this._scaleY = 1 - a * 0.22;
+          this._bobY = a * 5;
+          if (this._jumpPhaseTimer > 15) {
+            this._jumpPhase = 'up';
+            this._jumpPhaseTimer = 0;
+            this._jumpVY = -14;
           }
-          if (this.physX <= 0) { this.physX = 0; this.physVX = Math.abs(this.physVX) * DAMPING; }
-          if (this.physX >= maxX) { this.physX = maxX; this.physVX = -Math.abs(this.physVX) * DAMPING; }
-          if (this.physY <= 0) { this.physY = 0; this.physVY = Math.abs(this.physVY) * DAMPING; }
+        } else if (this._jumpPhase === 'up' || this._jumpPhase === 'down') {
+          this._jumpVY += GRAVITY * dt;
+          this._jumpY -= this._jumpVY * dt;
+          this._bobY = -this._jumpY;
+          this._scaleX = 0.85; this._scaleY = 1.15;
+          if (this._jumpY <= 0 && this._jumpVY > 0) {
+            this._jumpY = 0;
+            this._jumpPhase = 'land';
+            this._jumpPhaseTimer = 0;
+          } else {
+            this._jumpPhase = this._jumpVY < 0 ? 'up' : 'down';
+          }
+        } else if (this._jumpPhase === 'land') {
+          const l = Math.min(this._jumpPhaseTimer / 12, 1);
+          const recover = Math.sin(l * Math.PI);
+          this._scaleX = 1 + recover * 0.22; this._scaleY = 1 - recover * 0.28;
+          this._bobY = recover * 4;
+          if (this._jumpPhaseTimer > 20) {
+            this._scaleX = 1; this._scaleY = 1; this._bobY = 0;
+            this._jumpPhase = 'none';
+            this._animState = 'idle';
+            this._scheduleIdle(600 + Math.random() * 1200);
+          }
+        }
+      };
+
+      const tickSit = (dt) => {
+        this._sitTimer += dt;
+        if (this._sitProgress < 1) {
+          this._sitProgress = Math.min(this._sitProgress + 0.04 * dt, 1);
+        }
+        if (this._sitTimer > 90) {
+          this._sitProgress -= 0.04 * dt;
+          if (this._sitProgress <= 0) {
+            this._sitProgress = 0; this._scaleX = 1; this._scaleY = 1; this._bobY = 0;
+            this._animState = 'idle';
+            this._scheduleIdle(400);
+            return;
+          }
+        }
+        this._scaleY = 1 - this._sitProgress * 0.32;
+        this._scaleX = 1 + this._sitProgress * 0.18;
+        this._bobY = this._sitProgress * 8;
+      };
+
+      const tickRun = (dt) => {
+        const tx = Math.max(0, Math.min(this._maxX(), this._mouseX - W / 2));
+        const ty = Math.max(0, Math.min(this._maxY(), this._mouseY - H / 2));
+        const dx = tx - this.physX, dy = ty - this.physY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        this._runTimer -= dt;
+        if (dist < 8 || this._runTimer <= 0) {
+          this._animState = 'idle';
+          this._scheduleIdle(800);
+          return;
+        }
+        const speed = RUN_SPEED * dt;
+        this.physX += (dx / dist) * speed;
+        this.physY += (dy / dist) * speed;
+        this._facingLeft = dx < 0;
+        this._walkPhase = (this._walkPhase + 0.1 * dt) % 1;
+        const bob = Math.sin(this._walkPhase * Math.PI * 2);
+        this._bobY = bob * 5;
+        this._scaleX = 1 + Math.abs(bob) * 0.06;
+        this._scaleY = 1 - Math.abs(bob) * 0.07;
+      };
+
+      const tickThrown = (dt) => {
+        this._thrownVY += GRAVITY * dt;
+        this.physX += this._thrownVX * dt;
+        this.physY += this._thrownVY * dt;
+        if (this.physY >= this._maxY()) {
+          this.physY = this._maxY();
+          this._thrownVY = -Math.abs(this._thrownVY) * DAMPING;
+          this._thrownVX *= FRICTION;
+          this._scaleX = 1.3; this._scaleY = 0.65;
+          if (Math.abs(this._thrownVY) < 1.5 && Math.abs(this._thrownVX) < 0.8) {
+            this._thrownVX = 0; this._thrownVY = 0;
+            this._animState = 'walk';
+          }
+        } else {
+          this._scaleX = 0.85; this._scaleY = 1.15;
+        }
+        if (this.physX < 0)            { this.physX = 0;            this._thrownVX =  Math.abs(this._thrownVX) * DAMPING; }
+        if (this.physX > this._maxX()) { this.physX = this._maxX(); this._thrownVX = -Math.abs(this._thrownVX) * DAMPING; }
+        if (this.physY < 0)            { this.physY = 0;            this._thrownVY =  Math.abs(this._thrownVY) * DAMPING; }
+      };
+
+      const tickEyes = (dt) => {
+        this._eyeTimer -= dt;
+        if (this._eyeTimer <= 0) {
+          const r = Math.random();
+          if (r < 0.35)      { this._eyeTargetX = this._facingLeft ? -2 : 2; this._eyeTargetY = 0; }
+          else if (r < 0.55) { this._eyeTargetX = 0; this._eyeTargetY = -1; }
+          else if (r < 0.7)  { this._eyeTargetX = this._facingLeft ? 1 : -1; this._eyeTargetY = 1; }
+          else               { this._eyeTargetX = this._facingLeft ? -1 : 1; this._eyeTargetY = 0; }
+          this._eyeTimer = 40 + Math.random() * 120;
+        }
+        this._eyeOX += (this._eyeTargetX - this._eyeOX) * 0.15 * dt;
+        this._eyeOY += (this._eyeTargetY - this._eyeOY) * 0.15 * dt;
+      };
+
+      const tickBlink = (dt) => {
+        this._blinkTimer -= dt;
+        if (this._blinkTimer <= 0) {
+          this._blinkScale = 0.08;
+          setTimeout(() => { this._blinkScale = 1; }, 80);
+          this._blinkTimer = 120 + Math.random() * 200;
+        }
+      };
+
+      const loop = (ts) => {
+        const dt = Math.min((ts - lastTime) / 16.67, 3);
+        lastTime = ts;
+
+        if (this._animState !== 'dragging') {
+          switch (this._animState) {
+            case 'walk':    tickWalk(dt);    break;
+            case 'idle':    tickIdle(dt);    break;
+            case 'jump':    tickJump(dt);    break;
+            case 'sit':     tickSit(dt);     break;
+            case 'run':     tickRun(dt);     break;
+            case 'thrown':  tickThrown(dt);  break;
+          }
         }
 
-        else if (this.physState === 'wander') {
-          const dx = this.physTarget.x - this.physX;
-          const dy = this.physTarget.y - this.physY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 4) {
-            this.physState = 'idle';
-            this._scheduleWander();
-          } else {
-            const speed = Math.min(SPEED, dist);
-            this.physX += (dx / dist) * speed;
-            this.physY += (dy / dist) * speed;
+        tickEyes(dt);
+        tickBlink(dt);
+
+        // Direct DOM: position + squash/stretch
+        const wrap = this.$el.querySelector('.persona-wrap');
+        if (wrap) {
+          const flipX = this._facingLeft ? -1 : 1;
+          wrap.style.left = this.physX + 'px';
+          wrap.style.top  = (this.physY + this._bobY) + 'px';
+          wrap.style.transform = `scaleX(${flipX * this._scaleX}) scaleY(${this._scaleY})`;
+        }
+
+        // Direct DOM: SVG re-render on walking/roaming screens
+        if (this.screen === 'input' || this.screen === 'result') {
+          const svgWrap = this.$el.querySelector('.persona-svg-wrap');
+          if (svgWrap) {
+            const svgState = this._animState === 'jump' && this._jumpPhase !== 'none' ? 'jump'
+              : this._animState === 'sit'    ? 'sit'
+              : this._animState === 'run'    ? 'run'
+              : this._animState === 'thrown' ? 'thrown'
+              : this._animState === 'walk'   ? 'walk'
+              : 'idle';
+
+            const strokeColor = this._animState === 'thrown' ? '#EF4444'
+              : this._animState === 'run'    ? '#F59E0B'
+              : (this.screen === 'result' && this.result)
+                ? ({ ok: '#10B981', warning: '#F59E0B', critical: '#EF4444' }[this.result.risk_level] || '#9CA3AF')
+              : '#9CA3AF';
+
+            svgWrap.innerHTML = buildPersonaSvg(
+              this.personaFeatures,
+              strokeColor,
+              {
+                state: svgState,
+                facingLeft: this._facingLeft,
+                eyeOX: Math.round(this._eyeOX),
+                eyeOY: Math.round(this._eyeOY),
+                blinkScale: this._blinkScale,
+              }
+            );
           }
         }
 
@@ -478,10 +694,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     onPersonaMousedown(e) {
-      if (this.physState === 'thrown') return;
-      this.physState = 'dragging';
+      if (this._animState === 'thrown') return;
+      this._animState = 'dragging';
       clearTimeout(this._idleTimer);
-      cancelAnimationFrame(this._animFrame);
 
       this._dragOffset = { x: e.clientX - this.physX, y: e.clientY - this.physY };
       this._dragHistory = [{ x: e.clientX, y: e.clientY, t: Date.now() }];
@@ -502,14 +717,14 @@ document.addEventListener('alpine:init', () => {
         if (recent.length >= 2) {
           const first = recent[0], last = recent[recent.length - 1];
           const dt = Math.max(last.t - first.t, 1);
-          this.physVX = ((last.x - first.x) / dt) * 16;
-          this.physVY = ((last.y - first.y) / dt) * 16;
-          this.physState = 'thrown';
+          this._thrownVX = ((last.x - first.x) / dt) * 16;
+          this._thrownVY = ((last.y - first.y) / dt) * 16;
+          this._animState = 'thrown';
         } else {
-          this.physState = 'idle';
-          this._scheduleWander();
+          this._thrownVX = 0; this._thrownVY = 0;
+          this._animState = 'idle';
+          this._scheduleIdle(500);
         }
-        this._startPhysics();
       };
 
       window.addEventListener('mousemove', onMove);
@@ -537,6 +752,8 @@ document.addEventListener('alpine:init', () => {
       this.personaFeatures = extractFeatures(this.personaDesc);
       this.screen = 'progress';
       this.startThinking();
+      this._animState = 'run';
+      this._runTimer = 180;
       this.statusStep = 1;
 
       await sleep(800);
@@ -568,6 +785,8 @@ document.addEventListener('alpine:init', () => {
         this.result = await response.json();
         this.detailOpen = false;
         this.screen = 'result';
+        this._animState = 'idle';
+        this._scheduleIdle(1000);
 
       } catch (err) {
         this.stopThinking();
@@ -591,10 +810,13 @@ document.addEventListener('alpine:init', () => {
       this.stopThinking();
       this.characterState = 'idle';
       this.personaFeatures = {};
-      this.physState = 'idle';
-      this.physVX = 0;
-      this.physVY = 0;
-      this._scheduleWander();
+      this._animState = 'walk';
+      this._thrownVX = 0;
+      this._thrownVY = 0;
+      this._scaleX = 1;
+      this._scaleY = 1;
+      this._bobY = 0;
+      clearTimeout(this._idleTimer);
       this.screen = 'input';
       this.result = null;
       this.files = [];
@@ -606,10 +828,8 @@ document.addEventListener('alpine:init', () => {
       if (this.screen === 'progress') {
         return PERSONA_SVGS[this.characterState] || PERSONA_SVGS.thinking;
       }
-      const strokeColor = this.screen === 'result' && this.result
-        ? ({ ok: '#10B981', warning: '#F59E0B', critical: '#EF4444' }[this.result.risk_level] || '#9CA3AF')
-        : '#9CA3AF';
-      return buildPersonaSvg(this.personaFeatures, strokeColor);
+      // input/result screens: rAF loop renders directly into .persona-svg-wrap
+      return '';
     },
 
     get personaLabel() {

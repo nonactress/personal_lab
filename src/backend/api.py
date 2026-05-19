@@ -189,7 +189,9 @@ async def analyze_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+_DIST = Path("frontend/dist")
+if _DIST.exists():
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

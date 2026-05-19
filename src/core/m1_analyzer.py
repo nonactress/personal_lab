@@ -36,27 +36,38 @@ M1_SYSTEM_PROMPT = """프론트엔드 코드를 분석하여 사용자가 시각
 def detect_ui_patterns(components: list, potential_issues: list) -> list:
     """컴포넌트 분석 결과에서 PATTERN_TO_CHUNKS 키와 매칭되는 패턴을 감지한다."""
     patterns = []
+
+    small_size_classes = ["text-xs", "text-sm", "p-1", "p-2", "px-2", "py-1", "h-6", "h-7", "h-8", "text-[10px]", "text-[11px]", "text-[12px]"]
+    low_contrast_colors = ["gray-2", "gray-3", "gray-4", "gray-400", "gray-500", "slate-4", "slate-5", "zinc-4", "zinc-5", "neutral-4", "neutral-5", "text-gray", "text-slate", "text-zinc"]
+
     for comp in components:
         size = comp.get("styling", {}).get("size", "")
         color = comp.get("styling", {}).get("color", "")
-        if comp["type"] == "button" and any(s in size for s in ["text-xs", "text-sm", "p-1", "p-2"]):
+        context = comp.get("context", "").lower()
+
+        if comp["type"] == "button" and any(s in size for s in small_size_classes):
             patterns.append("small_button")
-        if any(c in color for c in ["gray-2", "gray-3", "gray-4"]):
+        if any(c in color for c in low_contrast_colors):
             patterns.append("low_contrast")
         if comp["type"] == "form":
             patterns.append("multi_step_form")
+        if comp["type"] == "input" and "label" not in context:
+            patterns.append("no_label_input")
+
+    issue_keyword_map = {
+        ("대비", "contrast", "색상", "color"): "low_contrast",
+        ("로딩", "loading", "대기", "spinner", "skeleton"): "loading_no_feedback",
+        ("오류", "error", "에러", "실패", "validation"): "no_error_guidance",
+        ("신뢰", "trust", "개인정보", "privacy", "인증", "security"): "trust_signal_missing",
+        ("라벨", "label", "placeholder", "힌트", "helper"): "no_label_input",
+        ("네비게이션", "navigation", "뒤로", "breadcrumb"): "no_navigation_context",
+    }
 
     for issue in potential_issues:
         issue_lower = issue.lower()
-        if "대비" in issue_lower or "contrast" in issue_lower:
-            if "low_contrast" not in patterns:
-                patterns.append("low_contrast")
-        if "로딩" in issue_lower or "loading" in issue_lower:
-            patterns.append("loading_no_feedback")
-        if "오류" in issue_lower or "error" in issue_lower:
-            patterns.append("no_error_guidance")
-        if "신뢰" in issue_lower or "trust" in issue_lower:
-            patterns.append("trust_signal_missing")
+        for keywords, pattern in issue_keyword_map.items():
+            if any(kw in issue_lower for kw in keywords) and pattern not in patterns:
+                patterns.append(pattern)
 
     return list(set(patterns))
 

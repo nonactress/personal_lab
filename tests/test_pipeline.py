@@ -1,41 +1,65 @@
+import asyncio
+import pytest
+from unittest.mock import patch, AsyncMock, MagicMock
 import json
-from unittest.mock import patch, MagicMock
-from src.core.logic import run_pipeline
 
-MOCK_M1 = {
-    "components": [{"type": "button", "label": "가입", "line_number": 10,
-                    "styling": {"size": "text-xs"}, "context": "가입 버튼"}],
-    "visual_hierarchy": "버튼이 작음",
-    "potential_issues": ["버튼 너무 작음"],
-    "detected_patterns": ["small_button"]
+SAMPLE_STRATA_DATA = {
+    "meta": {"total_rows": 100, "strata_count": 1, "built_at": "2026-05-19"},
+    "strata": {
+        "30대_대졸_남자": {
+            "count": 100,
+            "keys": {"age_group": "30대", "education": "대졸", "sex": "남자"},
+            "personas": [
+                {
+                    "age": 35, "occupation": "개발자", "province": "서울",
+                    "persona": "30대 개발자",
+                    "professional_persona": "스타트업 근무",
+                    "hobbies_and_interests": "게임, 유튜브",
+                    "cultural_background": "서울 출신",
+                    "skills_and_expertise": "Python, React",
+                }
+            ],
+        }
+    },
 }
-MOCK_M3 = {
-    "think_aloud": "버튼이 어딨지...",
-    "confusion_events": [{"element": "button", "line_number": 10,
-                          "reason": "너무 작음", "severity": 0.8,
-                          "evidence": "Nah(2004)"}],
-    "abandoned": True,
-    "abandonment_reason": "버튼 미발견"
+
+FAKE_SIM_RESULT = {
+    "confusion_events": [{"element": "버튼", "reason": "색이 흐림", "abandoned": False}],
+    "final_abandoned": False,
+    "abandonment_point": "",
+    "think_aloud": "버튼이 눈에 잘 안 띄었다.",
+    "developer_assumption": "바로 누를 것이다.",
 }
 
-def test_run_pipeline_returns_required_keys():
-    codebase = [{"name": "App.tsx", "content": "export default function App() { return <button>가입</button>; }"}]
 
-    with patch("src.core.logic.analyze_code", return_value=MOCK_M1), \
-         patch("src.core.logic.run_simulation", return_value=MOCK_M3):
-        result = run_pipeline(codebase, "20대 대학생", "회원가입하기")
+@pytest.mark.asyncio
+async def test_run_pipeline_returns_friction_map():
+    from src.core.logic import run_pipeline
 
-    assert "confusion_score" in result
-    assert "fix_prompts" in result
-    assert "think_aloud" in result
-    assert "top3" in result
+    codebase = [{"name": "test.html", "content": "<button>버튼</button>"}]
+    strata_keys = ["30대_대졸_남자"]
 
-def test_run_pipeline_score_is_int():
-    codebase = [{"name": "App.tsx", "content": "..."}]
+    with patch("src.core.logic._load_strata", return_value=SAMPLE_STRATA_DATA), \
+         patch("src.core.logic.analyze_code", return_value={
+             "components": [{"type": "button", "label": "버튼", "line_number": 1, "context": "CTA"}],
+             "visual_hierarchy": "없음", "potential_issues": [], "detected_patterns": [], "preview_html": ""
+         }), \
+         patch("src.core.logic.run_simulation_for_persona", new=AsyncMock(return_value=FAKE_SIM_RESULT)):
 
-    with patch("src.core.logic.analyze_code", return_value=MOCK_M1), \
-         patch("src.core.logic.run_simulation", return_value=MOCK_M3):
-        result = run_pipeline(codebase, "20대 대학생", "회원가입하기")
+        result = await run_pipeline(codebase, strata_keys, "서비스 탐색하기")
 
-    assert isinstance(result["confusion_score"], int)
-    assert 0 <= result["confusion_score"] <= 100
+    assert "friction_map" in result
+    assert "abandonment_rate" in result
+    assert "total_simulated" in result
+    assert result["total_simulated"] == 1
+    assert result["friction_map"][0]["element"] == "버튼"
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_raises_on_no_match():
+    from src.core.logic import run_pipeline
+
+    with patch("src.core.logic._load_strata", return_value=SAMPLE_STRATA_DATA), \
+         patch("src.core.logic.analyze_code", return_value={"components": [], "visual_hierarchy": "", "potential_issues": [], "preview_html": ""}):
+        with pytest.raises(ValueError, match="매칭된 strata 없음"):
+            await run_pipeline([{"name": "f", "content": ""}], ["없는_키_남자"])

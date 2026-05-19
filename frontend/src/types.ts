@@ -6,12 +6,14 @@ export interface PreviewPersona {
   age: number
   occupation: string
   province: string
+  persona?: string
 }
 
 export interface FrictionMapItem {
   element: string
   rate: number
   affected_count: number
+  total?: number
 }
 
 export interface Top3Item {

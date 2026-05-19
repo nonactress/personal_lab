@@ -139,8 +139,8 @@
   </div>
 
 
-  <!-- ═══════════════════════════════════════ PERSONA CHAT SCREEN -->
-  <div x-show="screen === 'persona_chat'"
+  <!-- ═══════════════════════════════════════ TARGET SELECT SCREEN -->
+  <div x-show="screen === 'target_select'"
        x-transition:enter="transition ease-out duration-300"
        x-transition:enter-start="opacity-0 translate-y-1"
        x-transition:enter-end="opacity-100 translate-y-0"
@@ -149,116 +149,96 @@
        x-transition:leave-end="opacity-0"
        class="min-h-screen flex flex-col items-center justify-center px-4 py-16">
 
-    <div class="w-full max-w-lg">
-
+    <div class="w-full max-w-xl">
       <div class="flex items-center justify-between mb-6">
         <button @click="screen = 'source'" class="btn-nav-back">← 뒤로</button>
         <div class="font-mono text-xs tracking-widest uppercase" style="color:#3B82F6">PersonaLab</div>
         <div class="text-xs font-mono" style="color:#374151" x-text="sourceLabel"></div>
       </div>
 
-      <div class="chat-log mb-2" x-ref="chatLog">
-        <template x-for="(msg, i) in chatMessages" :key="i">
-          <div>
-            <div :class="msg.role === 'bot' ? 'chat-bubble-bot' : 'chat-bubble-user'"
-                 x-text="msg.text"></div>
-            <div x-show="msg.chips && msg.chips.length" class="chat-trait-chips" style="padding-left:4px">
-              <template x-for="chip in (msg.chips || [])">
-                <button @click="toggleTrait(chip)"
-                        :class="selectedTraits.includes(chip) ? 'trait-chip selected' : 'trait-chip'"
-                        x-text="chip"></button>
-              </template>
-            </div>
-          </div>
-        </template>
+      <h2 class="text-xl font-semibold mb-1" style="color:#F1F5F9">타겟 사용자 선택</h2>
+      <p class="text-sm mb-8" style="color:#64748B">Nemotron 100만 명 데이터셋에서 해당 조건 페르소나를 매칭합니다.</p>
 
-        <div x-show="chatBotThinking" class="chat-bubble-bot">
-          <div class="flex gap-1.5">
-            <div class="bounce-dot" style="animation-delay:0ms"></div>
-            <div class="bounce-dot" style="animation-delay:150ms"></div>
-            <div class="bounce-dot" style="animation-delay:300ms"></div>
-          </div>
+      <!-- 나이대 -->
+      <div class="mb-5">
+        <div class="text-xs font-medium mb-2" style="color:#94A3B8">나이대 *</div>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="g in ['10~20대','30대','40대','50대','60대+']">
+            <button @click="selectedAgeGroup = g; fetchBuildCast()"
+                    :class="selectedAgeGroup === g ? 'field-chip active' : 'field-chip'"
+                    x-text="g"></button>
+          </template>
         </div>
       </div>
 
-      <div class="chat-input-row">
-        <input x-model="chatInput"
-               @keyup.enter="submitChat()"
-               :disabled="chatBotThinking || chatStep >= 2"
-               :placeholder="chatStep === 0 ? '예: 박지민, 28살 대학원생, 처음 써봄' : '직접 입력하거나 위에서 선택'"
-               class="chat-input">
-        <button @click="submitChat()"
-                :disabled="(!chatInput.trim() && selectedTraits.length === 0) || chatBotThinking || chatStep >= 2"
-                class="chat-send-btn">↑</button>
-      </div>
-
-      <p x-show="chatStep === 1 && selectedTraits.length > 0"
-         class="text-xs mt-2 text-center" style="color:#475569">
-        선택됨: <span x-text="selectedTraits.join(', ')"></span> — ↑ 눌러서 확정
-      </p>
-    </div>
-  </div>
-
-
-  <!-- ═══════════════════════════════════════ CAST SCREEN -->
-  <div x-show="screen === 'cast'"
-       x-transition:enter="transition ease-out duration-300"
-       x-transition:enter-start="opacity-0 translate-y-1"
-       x-transition:enter-end="opacity-100 translate-y-0"
-       x-transition:leave="transition ease-in duration-150"
-       x-transition:leave-start="opacity-100"
-       x-transition:leave-end="opacity-0"
-       class="min-h-screen flex flex-col items-center justify-center px-4 py-16">
-
-    <div class="w-full max-w-lg">
-
-      <div class="flex items-center justify-between mb-6">
-        <button @click="screen = 'persona_chat'" class="btn-nav-back">← 다시 대화</button>
-        <div class="font-mono text-xs tracking-widest uppercase" style="color:#3B82F6">PersonaLab</div>
-        <div></div>
-      </div>
-
-      <div class="chat-bubble-bot mb-4" style="max-width:100%">
-        테스터 후보를 만들었어요. 누가 테스트할지 골라주세요.
-      </div>
-
-      <div x-show="castLoading" class="flex justify-center py-8">
-        <div class="flex gap-1.5">
-          <div class="bounce-dot" style="animation-delay:0ms"></div>
-          <div class="bounce-dot" style="animation-delay:150ms"></div>
-          <div class="bounce-dot" style="animation-delay:300ms"></div>
+      <!-- 성별 -->
+      <div class="mb-5">
+        <div class="text-xs font-medium mb-2" style="color:#94A3B8">성별 *</div>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="g in ['남자','여자','모두']">
+            <button @click="selectedSex = g; fetchBuildCast()"
+                    :class="selectedSex === g ? 'field-chip active' : 'field-chip'"
+                    x-text="g"></button>
+          </template>
         </div>
       </div>
 
-      <div x-show="!castLoading">
-        <template x-for="(p, i) in castPersonas" :key="i">
-          <div @click="selectedPersonaIdx = i"
-               :class="selectedPersonaIdx === i ? 'cast-card selected' : 'cast-card'">
-            <div class="cast-avatar" x-text="p.name ? p.name[0] : '?'"></div>
-            <div class="flex-1 min-w-0">
-              <div>
-                <span class="cast-name" x-text="p.name"></span>
-                <span class="cast-meta" x-text="`${p.age} · ${p.role}`"></span>
-              </div>
-              <div class="cast-traits">
-                <template x-for="t in (p.traits || [])">
-                  <span class="cast-trait" x-text="t"></span>
-                </template>
-              </div>
-            </div>
-            <span class="cast-pick-badge" x-text="selectedPersonaIdx === i ? '✓ 선택됨' : 'pick'"></span>
+      <!-- 학력 -->
+      <div class="mb-5">
+        <div class="text-xs font-medium mb-2" style="color:#94A3B8">학력 *</div>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="g in ['고졸이하','전문대','대졸','대학원']">
+            <button @click="selectedEducation = g; fetchBuildCast()"
+                    :class="selectedEducation === g ? 'field-chip active' : 'field-chip'"
+                    x-text="g"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- 지역 (선택) -->
+      <div class="mb-5">
+        <div class="text-xs font-medium mb-2" style="color:#94A3B8">지역 <span style="color:#475569">(선택)</span></div>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="g in ['수도권','지방','모두']">
+            <button @click="selectedRegion = g; fetchBuildCast()"
+                    :class="selectedRegion === g ? 'field-chip active' : 'field-chip'"
+                    x-text="g"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- 예상 매칭 -->
+      <div x-show="targetSelectReady" class="mb-6 px-4 py-3 rounded-xl"
+           style="background:#1E293B;border:1px solid rgba(148,163,184,0.12)">
+        <div x-show="castLoading" class="text-sm" style="color:#64748B">매칭 중…</div>
+        <div x-show="!castLoading && matchedStrata.length > 0">
+          <div class="text-sm font-medium mb-1" style="color:#F1F5F9">
+            예상 매칭: <span style="color:#60a5fa" x-text="totalCount.toLocaleString()"></span>명
           </div>
-        </template>
-
-        <div class="flex items-center gap-3 mt-4">
-          <button @click="screen = 'persona_chat'" class="btn-ghost" style="flex:none">
-            ↻ 다시 대화
-          </button>
-          <button @click="runSelected()" class="btn-primary" style="flex:1">
-            Run →
-          </button>
+          <div class="text-xs" style="color:#64748B"
+               x-text="`strata ${matchedStrata.length}개 · 대표 ${Math.min(matchedStrata.length * 3, 15)}명 시뮬`"></div>
+          <div x-show="previewPersonas.length" class="mt-2 space-y-1">
+            <template x-for="(p, i) in previewPersonas" :key="i">
+              <div class="text-xs" style="color:#94A3B8"
+                   x-text="`· ${p.age}세 ${p.occupation} (${p.province})`"></div>
+            </template>
+          </div>
+        </div>
+        <div x-show="!castLoading && matchedStrata.length === 0" class="text-sm" style="color:#f87171">
+          해당 조건의 페르소나가 없습니다.
         </div>
       </div>
+
+      <div x-show="error" x-text="error"
+           class="mb-4 px-4 py-3 rounded-xl text-sm"
+           style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:#f87171"></div>
+
+      <button @click="analyze()"
+              :disabled="!targetSelectReady || matchedStrata.length === 0"
+              class="btn-primary w-full"
+              :style="(!targetSelectReady || matchedStrata.length === 0) ? 'opacity:0.45;cursor:not-allowed' : ''">
+        시뮬레이션 실행 →
+      </button>
     </div>
   </div>
 
@@ -383,21 +363,6 @@
           </div>
         </div>
 
-        <!-- Selected persona card -->
-        <div x-show="selectedCastPersona" class="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl"
-             style="background:#1E293B;border:1px solid rgba(148,163,184,0.12)">
-          <div class="cast-avatar" x-text="selectedCastPersona?.name?.[0] || '?'"></div>
-          <div>
-            <div class="text-sm font-medium" style="color:#F1F5F9" x-text="selectedCastPersona?.name"></div>
-            <div class="text-xs" style="color:#64748B" x-text="`${selectedCastPersona?.age} · ${selectedCastPersona?.role}`"></div>
-          </div>
-          <div class="flex gap-1 ml-auto flex-wrap">
-            <template x-for="t in (selectedCastPersona?.traits || []).slice(0,3)">
-              <span class="cast-trait" x-text="t"></span>
-            </template>
-          </div>
-        </div>
-
         <div x-show="result?.developer_assumption" class="mb-4">
           <div class="font-mono text-xs tracking-wider uppercase mb-2" style="color:#475569">개발자 바이어스 갭</div>
           <div class="bias-grid">
@@ -421,6 +386,19 @@
           <p x-show="result?.dropout_point"
              class="mt-2 text-xs" style="color:#f87171"
              x-text="`이탈 지점: ${result?.dropout_point}`"></p>
+        </div>
+
+        <!-- Friction Map -->
+        <div x-show="result?.friction_map?.length" class="mb-4">
+          <div class="font-mono text-xs tracking-wider uppercase mb-3" style="color:#475569">
+            주요 마찰 지점
+            <span x-show="result?.total_simulated" class="ml-2 normal-case" style="color:#374151"
+                  x-text="`(${result?.total_simulated}명 시뮬 기준)`"></span>
+          </div>
+          <div x-html="buildFrictionBars()"></div>
+          <div x-show="result?.abandonment_rate > 0" class="mt-3 text-sm"
+               style="color:#f87171"
+               x-text="`이탈률: ${Math.round((result?.abandonment_rate || 0) * 100)}%`"></div>
         </div>
 
         <div class="insight-row-2col">

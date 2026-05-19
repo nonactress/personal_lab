@@ -315,7 +315,6 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('personaApp', () => ({
     screen: 'source',
     files: [],
-    personaDesc: '',
     taskDesc: '',
     dragging: false,
     error: '',
@@ -327,7 +326,6 @@ document.addEventListener('alpine:init', () => {
     personaFeatures: {},
     personaMinimized: false,
     _thinkInterval: null,
-    _featureFetch: null,
 
     // Source screen
     sourceMode: 'file',
@@ -335,25 +333,20 @@ document.addEventListener('alpine:init', () => {
     sourcePath: '',
     sourceUrl: '',
 
-    // Persona chat
-    chatMessages: [],
-    chatInput: '',
-    chatStep: 0,
-    selectedTraits: [],
-    chatBotThinking: false,
-    chatPersonaHint: '',
-
-    // Cast
-    castPersonas: [],
-    selectedPersonaIdx: 0,
+    // Target select
+    selectedAgeGroup: '',
+    selectedSex: '',
+    selectedEducation: '',
+    selectedRegion: '모두',
+    selectedOccupationType: '모두',
+    matchedStrata: [],
+    totalCount: 0,
+    previewPersonas: [],
     castLoading: false,
 
     // Result sidebar
     resultSection: 'tldr',
     liveThought: '',
-
-    // Selected cast persona (shown in result)
-    selectedCastPersona: null,
 
     physX: 100,
     physY: 100,
@@ -404,7 +397,7 @@ document.addEventListener('alpine:init', () => {
 
     steps: [
       { label: '코드 파싱', icon: '📂' },
-      { label: '페르소나 생성', icon: '🧬' },
+      { label: '페르소나 매칭', icon: '🧬' },
       { label: 'UX 시뮬레이션', icon: '🔍' },
       { label: '리포트 생성', icon: '📊' },
     ],
@@ -422,23 +415,6 @@ document.addEventListener('alpine:init', () => {
 
       this._startPhysics();
       this._animState = 'walk';
-
-      this._featureFetch = debounce(async (val) => {
-        this.personaFeatures = extractFeatures(val);
-        if (!val.trim()) return;
-        try {
-          const res = await fetch('/persona-features', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ persona_desc: val }),
-          });
-          if (res.ok) this.personaFeatures = await res.json();
-        } catch (_) {}
-      }, 500);
-
-      this.$watch('personaDesc', (val) => {
-        this._featureFetch(val);
-      });
     },
 
     get sourceReady() {
@@ -467,104 +443,49 @@ document.addEventListener('alpine:init', () => {
     proceedFromSource() {
       if (!this.sourceReady) return;
       this.error = '';
-      this.chatMessages = [];
-      this.chatInput = '';
-      this.chatStep = 0;
-      this.selectedTraits = [];
-      this.chatPersonaHint = '';
-      this.screen = 'persona_chat';
-      this.$nextTick(() => this._botMessage(
-        '이 앱을 테스트할 유저가 어떤 사람이에요? (이름, 나이, 직업 등)',
-        null
-      ));
+      this.selectedAgeGroup = '';
+      this.selectedSex = '';
+      this.selectedEducation = '';
+      this.selectedRegion = '모두';
+      this.selectedOccupationType = '모두';
+      this.matchedStrata = [];
+      this.totalCount = 0;
+      this.previewPersonas = [];
+      this.screen = 'target_select';
     },
 
-    _botMessage(text, chips) {
-      this.chatBotThinking = true;
-      setTimeout(() => {
-        this.chatBotThinking = false;
-        this.chatMessages.push({ role: 'bot', text, chips: chips || [] });
-        this.$nextTick(() => {
-          const log = this.$refs.chatLog;
-          if (log) log.scrollTop = log.scrollHeight;
-        });
-      }, 700 + Math.random() * 400);
+    get targetSelectReady() {
+      return !!(this.selectedAgeGroup && this.selectedSex && this.selectedEducation);
     },
 
-    toggleTrait(chip) {
-      if (this.selectedTraits.includes(chip)) {
-        this.selectedTraits = this.selectedTraits.filter(t => t !== chip);
-      } else {
-        this.selectedTraits.push(chip);
-      }
-    },
-
-    submitChat() {
-      const text = this.chatInput.trim();
-      const traits = [...this.selectedTraits];
-      if (!text && traits.length === 0) return;
-      if (this.chatBotThinking || this.chatStep >= 2) return;
-
-      if (this.chatStep === 0) {
-        this.chatMessages.push({ role: 'user', text });
-        this.chatInput = '';
-        this.chatPersonaHint = text;
-        this.chatStep = 1;
-        this._botMessage(
-          '어떤 걸 중요하게 생각하는 사람이에요?',
-          ['속도', '한국어 지원', '신뢰성', '모바일', '가격', '편리함', '보안', '정보량']
-        );
-      } else if (this.chatStep === 1) {
-        const traitText = traits.length > 0 ? traits.join(', ') : text;
-        const displayText = traits.length > 0
-          ? traits.join(' · ')
-          : text;
-        this.chatMessages.push({ role: 'user', text: displayText });
-        this.chatInput = '';
-        this.selectedTraits = [];
-        this.chatPersonaHint += ` / ${traitText}`;
-        this.chatStep = 2;
-        this._botMessage('좋아요! 테스터 후보를 만들고 있어요…', null);
-        setTimeout(() => this._generateCast(), 1200);
-      }
-    },
-
-    async _generateCast() {
+    async fetchBuildCast() {
+      if (!this.targetSelectReady) return;
       this.castLoading = true;
-      this.screen = 'cast';
+      this.matchedStrata = [];
+      this.totalCount = 0;
+      this.previewPersonas = [];
       try {
-        const res = await fetch('/generate-cast', {
+        const res = await fetch('/build-cast', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            persona_hint: this.chatPersonaHint,
-            source_desc: this.sourceLabel,
+            age_group: this.selectedAgeGroup,
+            sex: this.selectedSex,
+            education: this.selectedEducation,
+            region: this.selectedRegion,
+            occupation_type: this.selectedOccupationType,
           }),
         });
-        if (!res.ok) throw new Error('cast');
+        if (!res.ok) throw new Error('build-cast');
         const data = await res.json();
-        this.castPersonas = data.personas || [];
-        this.selectedPersonaIdx = 0;
+        this.matchedStrata = data.matched_strata || [];
+        this.totalCount = data.total_count || 0;
+        this.previewPersonas = data.preview_personas || [];
       } catch (_) {
-        this.castPersonas = [
-          { name: '박지민', age: 28, role: '대학원생', traits: ['in a hurry', '한국어', 'first-time'], goal: '서비스 탐색하기' },
-          { name: '김도현', age: 42, role: '직장인', traits: ['skeptical', '가격 민감', 'power user'], goal: '효율적으로 완료하기' },
-          { name: '이수아', age: 19, role: '고등학생', traits: ['mobile-only', 'curious', 'social'], goal: '빠르게 해보기' },
-          { name: '최영자', age: 63, role: '자영업', traits: ['low-tech', '한국어만', 'cautious'], goal: '안전하게 사용하기' },
-        ];
-        this.selectedPersonaIdx = 0;
+        this.error = '매칭 중 오류가 발생했어요.';
       } finally {
         this.castLoading = false;
       }
-    },
-
-    runSelected() {
-      const p = this.castPersonas[this.selectedPersonaIdx];
-      if (!p) return;
-      this.selectedCastPersona = p;
-      this.personaDesc = `${p.name}, ${p.age}세 ${p.role}, ${(p.traits || []).join(', ')}`;
-      this.personaFeatures = extractFeatures(this.personaDesc);
-      this.analyze();
     },
 
     handleFiles(e) {
@@ -937,11 +858,11 @@ document.addEventListener('alpine:init', () => {
       this.statusStep = 2;
       await sleep(600);
       this.statusStep = 3;
-      this.liveThought = `${this.personaDesc.split(',')[0] || '페르소나'}이(가) 앱을 살펴보고 있어요…`;
+      this.liveThought = `${this.totalCount.toLocaleString()}명 규모 페르소나가 앱을 살펴보고 있어요…`;
 
       try {
         const formData = new FormData();
-        formData.append('persona_desc', this.personaDesc.trim() || '20대 대학생');
+        formData.append('strata_keys', JSON.stringify(this.matchedStrata));
         formData.append('task', this.taskDesc.trim() || '서비스 탐색하기');
 
         if (hasUrl) {
@@ -1004,20 +925,19 @@ document.addEventListener('alpine:init', () => {
       this.result = null;
       this.files = [];
       this.error = '';
-      this.personaDesc = '';
       this.taskDesc = '';
       this.sourceMode = 'file';
       this.sourcePort = '';
       this.sourcePath = '';
       this.sourceUrl = '';
-      this.chatMessages = [];
-      this.chatInput = '';
-      this.chatStep = 0;
-      this.selectedTraits = [];
-      this.chatPersonaHint = '';
-      this.castPersonas = [];
-      this.selectedPersonaIdx = 0;
-      this.selectedCastPersona = null;
+      this.selectedAgeGroup = '';
+      this.selectedSex = '';
+      this.selectedEducation = '';
+      this.selectedRegion = '모두';
+      this.selectedOccupationType = '모두';
+      this.matchedStrata = [];
+      this.totalCount = 0;
+      this.previewPersonas = [];
       this.liveThought = '';
       this.resultSection = 'tldr';
     },
@@ -1028,8 +948,8 @@ document.addEventListener('alpine:init', () => {
       if (this.screen === 'result' && this.result) {
         return this.result.risk_label || '분석 완료';
       }
-      if (!this.personaDesc.trim()) return '페르소나 대기 중';
-      return this.personaDesc.trim().split(/\s+/).slice(0, 4).join(' ');
+      if (!this.selectedAgeGroup) return '페르소나 대기 중';
+      return `${this.selectedAgeGroup} ${this.selectedSex} ${this.selectedEducation}`.trim();
     },
 
     get riskConfig() {
@@ -1111,6 +1031,24 @@ document.addEventListener('alpine:init', () => {
           </summary>
           <div class="issue-body"><b>근거</b> — ${esc(item.evidence)}</div>
         </details>`;
+      }).join('');
+    },
+
+    buildFrictionBars() {
+      const fm = this.result?.friction_map || [];
+      if (!fm.length) return '<p class="no-issues">마찰 지점 없음</p>';
+      const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return fm.slice(0, 8).map((item, i) => {
+        const pct = Math.round(item.rate * 100);
+        const bars = '█'.repeat(Math.round(item.rate * 8));
+        const color = pct >= 70 ? '#EF4444' : pct >= 40 ? '#F59E0B' : '#60a5fa';
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#CBD5E1;font-size:13px">${i+1}. ${esc(item.element)}</span>
+            <span style="color:${color};font-size:12px;font-family:monospace">${item.affected_count}명</span>
+          </div>
+          <div style="font-size:11px;color:${color};letter-spacing:-1px">${bars}</div>
+        </div>`;
       }).join('');
     },
   }));

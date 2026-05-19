@@ -153,7 +153,7 @@ presonal_Lab/
 │   ├── chunk_registry.py    Pattern-Mapped CAG (43개 연구 청크)
 │   └── persona_params/
 │       └── 20대_대학생.json 8개 UX 행동 피처 (논문 기반)
-├── dong_paper/전처리 논문/   8개 전처리된 UX 논문 (청크 소스)
+├── rag_sources/전처리 논문/  8개 전처리된 UX 논문 (청크 소스)
 ├── tests/                   27개 유닛 테스트 (LLM mock)
 ├── .env.example             API 키 템플릿
 └── requirements.txt         의존성 목록

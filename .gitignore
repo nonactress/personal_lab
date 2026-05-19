@@ -9,3 +9,14 @@ build/
 .venv/
 venv/
 data/nemotron_strata.json
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# Claude Code / agent tooling
+.claude/
+.agents/
+.superpowers/
+skills-lock.json

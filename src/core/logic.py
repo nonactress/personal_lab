@@ -7,11 +7,15 @@ from src.core.m3_simulation import run_simulation_for_persona
 from src.core.m4_scorer import build_scorer_output_v2
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
+_STRATA_CACHE: dict | None = None
 
 
 def _load_strata() -> dict:
-    with open(_STRATA_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    global _STRATA_CACHE
+    if _STRATA_CACHE is None:
+        with open(_STRATA_PATH, encoding="utf-8") as f:
+            _STRATA_CACHE = json.load(f)
+    return _STRATA_CACHE
 
 
 def _match_strata(strata_data: dict, strata_keys: list[str]) -> list[tuple[str, dict]]:

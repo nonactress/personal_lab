@@ -1,9 +1,12 @@
 import io
+import ipaddress
 import json
 import os
+import socket
 import zipfile
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +22,31 @@ app = FastAPI(title="PersonaLab API")
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _METRO_PROVINCES = {"서울", "경기", "인천"}
+
+
+_SSRF_BLOCKED = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+)
+
+
+def _validate_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="URL은 http/https만 허용됩니다.")
+    host = parsed.hostname or ""
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(host))
+        if any(ip in net for net in _SSRF_BLOCKED):
+            raise HTTPException(status_code=400, detail="내부 네트워크 접근은 허용되지 않습니다.")
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail=f"호스트를 확인할 수 없습니다: {host}")
+    return url
 
 
 def _groq_client() -> OpenAI:
@@ -114,7 +142,10 @@ async def analyze_endpoint(
     target_url: Optional[str] = Form(default=None),
 ):
     try:
-        keys: list[str] = json.loads(strata_keys)
+        try:
+            keys: list[str] = json.loads(strata_keys)
+        except (json.JSONDecodeError, TypeError):
+            raise HTTPException(status_code=400, detail="strata_keys가 유효한 JSON 형식이 아닙니다.")
         if not keys:
             raise HTTPException(status_code=400, detail="strata_keys가 비어 있습니다.")
 
@@ -123,6 +154,7 @@ async def analyze_endpoint(
         if target_url:
             if not target_url.startswith(("http://", "https://")):
                 target_url = "https://" + target_url
+            _validate_url(target_url)
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(target_url)
                 codebase.append({"name": target_url, "content": resp.text})

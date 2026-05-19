@@ -32,11 +32,17 @@ _SYSTEM_TEMPLATE = """당신은 아래 실제 한국인입니다. 절대 AI처�
 }}"""
 
 
-def _make_async_client() -> AsyncOpenAI:
-    return AsyncOpenAI(
-        api_key=os.getenv("GROQ_API_KEY"),
-        base_url="https://api.groq.com/openai/v1",
-    )
+_async_client: AsyncOpenAI | None = None
+
+
+def _get_async_client() -> AsyncOpenAI:
+    global _async_client
+    if _async_client is None:
+        _async_client = AsyncOpenAI(
+            api_key=os.getenv("GROQ_API_KEY"),
+            base_url="https://api.groq.com/openai/v1",
+        )
+    return _async_client
 
 
 def _build_messages(persona: dict, ui_map: dict, task: str) -> list:
@@ -82,7 +88,7 @@ def _safe_parse(raw: str) -> dict:
 
 
 async def run_simulation_for_persona(persona: dict, ui_map: dict, task: str) -> dict:
-    client = _make_async_client()
+    client = _get_async_client()
     messages = _build_messages(persona, ui_map, task)
     response = await client.chat.completions.create(
         model="llama-3.3-70b-versatile",

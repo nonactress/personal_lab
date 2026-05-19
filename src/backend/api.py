@@ -157,7 +157,7 @@ async def analyze_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-app.mount("/", StaticFiles(directory="src/frontend", html=True), name="frontend")
+app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

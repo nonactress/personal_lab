@@ -2,7 +2,7 @@ import json
 import re
 from pathlib import Path
 
-BASE = Path(__file__).parent.parent / "dong_paper" / "전처리 논문"
+BASE = Path(__file__).parent.parent / "rag_sources" / "전처리 논문"
 
 def _load_chunks_from_file(path: Path, prefix: str) -> dict:
     """_rag_processed.md 파일에서 # CHUNK N 섹션을 추출한다."""

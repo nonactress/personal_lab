@@ -79,6 +79,56 @@ FIN:NECT 챌린지 2026 (마감 2026.05.25) 제출용 프로젝트다.
 
 ---
 
+## 실행 명령어
+
+```bash
+# 서버 기동
+uvicorn src.backend.api:app --reload --port 8000
+
+# 테스트
+pytest tests/ -v
+```
+
+환경변수 필수:
+```
+GROQ_API_KEY=...  # Groq API (llama-3.3-70b-versatile)
+```
+
+---
+
+## 아키텍처
+
+```
+파일 업로드 + persona_desc + task
+    ↓
+M1 (m1_analyzer.py)   — 코드 → UI 맵 + 패턴 감지
+    ↓
+M2 (m2_persona.py)    — persona_desc + 패턴 → 행동 제약 + 연구 컨텍스트
+    ↓
+M3 (m3_simulation.py) — think_aloud + think_aloud_steps[] + confusion_events
+    ↓
+M4 (m4_scorer.py)     — risk_level + fix_prompts (LLM 생성) + top3
+```
+
+**data/ 레이어:**
+- `chunk_registry.py` — 논문 청크 저장소 (Nah, Sweller, Miller 등 8개 연구)
+- `persona_params/` — 코호트별 행동 파라미터 JSON (patience, bballi_bballi 등)
+
+## 기술 스택
+
+- Backend: FastAPI + Groq (llama-3.3-70b-versatile)
+- Frontend: Alpine.js + Tailwind CDN (정적 파일로 FastAPI가 서빙)
+- 프론트 진입점: `src/frontend/index.html` + `app.js` + `style.css`
+
+## 현재 API 스펙
+
+`POST /analyze` — FormData: `files[]`, `persona_desc`, `task` (기본값: "서비스 탐색하기")
+응답 필드: `think_aloud`, `think_aloud_steps[]`, `fix_prompts[]`, `risk_level`, `top3`, `developer_assumption`
+
+`POST /persona-features` — JSON: `{ persona_desc }` → 위젯용 외형 특징 추출
+
+---
+
 ## 일반 규칙
 
 - 모든 응답은 한국어로 한다

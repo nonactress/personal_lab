@@ -4,6 +4,7 @@ import json
 import os
 import socket
 import zipfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -16,10 +17,21 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import httpx
 
-from src.core.logic import run_pipeline
+from src.core.logic import run_pipeline, _load_strata
 
 load_dotenv()
-app = FastAPI(title="PersonaLab API")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        _load_strata()
+    except Exception:
+        pass
+    yield
+
+
+app = FastAPI(title="PersonaLab API", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 _STRATA_PATH = Path("data/nemotron_strata.json")

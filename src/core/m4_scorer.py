@@ -238,14 +238,79 @@ def build_scorer_output_v2(
                 seen.add(fp)
                 all_fixes.append(fp)
 
+    # top3: 전체 스크린 이슈 합산 → 빈도 기반 severity 계산
+    all_issue_counts: dict = defaultdict(lambda: {"reason": "", "count": 0})
+    for s in per_screen.values():
+        for iss in s.get("issues", []):
+            el = iss["element"]
+            if not all_issue_counts[el]["reason"]:
+                all_issue_counts[el]["reason"] = iss["reason"]
+            all_issue_counts[el]["count"] += iss["count"]
+
+    max_count = max((v["count"] for v in all_issue_counts.values()), default=1)
+    top3 = sorted(
+        [
+            {
+                "reason": v["reason"],
+                "evidence": f"{el} 요소에서 {v['count']}명이 혼란",
+                "severity": round(v["count"] / max_count, 2),
+            }
+            for el, v in all_issue_counts.items()
+        ],
+        key=lambda x: x["severity"],
+        reverse=True,
+    )[:3]
+
+    # issues_summary: per_screen risk_level 집계
+    issues_summary = {"critical": 0, "warning": 0, "info": 0}
+    for s in per_screen.values():
+        rl = s.get("risk_level", "ok")
+        if rl == "critical":
+            issues_summary["critical"] += 1
+        elif rl == "warning":
+            issues_summary["warning"] += 1
+        else:
+            issues_summary["info"] += 1
+
+    # developer_assumption: 가장 혼란스러운 결과에서 추출
+    developer_assumption = next(
+        (
+            r.get("developer_assumption", "")
+            for r in sorted(
+                all_results,
+                key=lambda r: len(r.get("confusion_events", [])),
+                reverse=True,
+            )
+            if r.get("developer_assumption")
+        ),
+        "",
+    )
+
+    # dropout_point: 이탈한 첫 번째 결과의 abandonment_point
+    dropout_point = next(
+        (
+            r.get("abandonment_point", "")
+            for r in all_results
+            if r.get("final_abandoned") and r.get("abandonment_point")
+        ),
+        "",
+    )
+
+    risk_labels = {"critical": "출시 위험", "warning": "개선 권장", "ok": "출시 가능"}
+
     return {
         "friction_map": friction_map,
         "abandonment_rate": abandonment_rate,
         "total_simulated": total_simulated,
         "risk_level": risk_level,
+        "risk_label": risk_labels.get(risk_level, "출시 가능"),
         "think_aloud": think_aloud,
         "fix_prompts": all_fixes[:3],
-        "top3": [],
+        "top3": top3,
+        "developer_assumption": developer_assumption,
+        "abandoned": abandonment_rate >= 0.5,
+        "dropout_point": dropout_point,
+        "issues_summary": issues_summary,
         "per_screen": per_screen,
         "edge_dropout": edge_dropout,
     }

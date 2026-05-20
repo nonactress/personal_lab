@@ -4,6 +4,8 @@ Nemotron-Personas-Korea → data/nemotron_strata.json 빌드
 소요: 10~30분 (1회만 실행)
 """
 import os
+from dotenv import load_dotenv
+load_dotenv()
 os.environ["USE_TORCH"] = "0"
 os.environ["USE_JAX"] = "0"
 os.environ["USE_TF"] = "0"

@@ -15,37 +15,52 @@
 첫 사용자가 파싱 시간(수백ms)을 그대로 응답 지연으로 받는다.
 
 **수정 방향**
-FastAPI `startup` 이벤트를 사용해 서버가 켜지는 시점에 미리 파싱해둔다.
+FastAPI `lifespan` 컨텍스트 매니저를 사용해 서버가 켜지는 시점에 미리 파싱해둔다.
+(`@app.on_event("startup")`은 deprecated — lifespan 패턴 사용)
 이후 모든 요청은 메모리에 올라간 딕셔너리를 즉각 반환한다.
 
 ```python
-@app.on_event("startup")
-async def preload_strata():
-    global _STRATA_CACHE
-    with open("data/nemotron_strata.json") as f:
-        _STRATA_CACHE = json.load(f)
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        _load_strata()   # strata JSON 사전 파싱 (파일 없으면 부팅은 계속)
+    except Exception:
+        pass
+    yield
+
+app = FastAPI(title="PersonaLab API", lifespan=lifespan)
 ```
 
 ---
 
-### A-2. api.py의 strata 캐시 누락 수정
+### A-2. api.py의 strata 중복 캐시 제거
 
 **현재 문제**
-`api.py`의 `_load_strata_once()`는 이름과 달리 매 `/build-cast` 요청마다 파일을 열고 파싱한다.
-`logic.py`에는 캐시가 있지만 `api.py`에는 없어서 같은 파일을 중복으로 읽는 구조다.
+`api.py`와 `logic.py`가 동일한 `nemotron_strata.json`을 각각 독립 캐시(`_STRATA_CACHE_API`, `_STRATA_CACHE`)에 올린다.
+같은 데이터를 두 벌 메모리에 보관하는 낭비이며, 유지보수 시 두 곳을 동시에 관리해야 하는 혼란이 생긴다.
+
+> **코드 리뷰 피드백**: "데이터 로딩 로직을 하나의 공통 모듈로 통합하여 단일 캐시를 공유하도록 설계하는 것을 권장합니다."
 
 **수정 방향**
-`api.py`에도 모듈 수준 캐시 변수를 두고, 첫 호출 이후에는 메모리에서 반환한다.
+`api.py`의 `_STRATA_CACHE_API`와 `_load_strata_once()`를 제거한다.
+`/build-cast` 엔드포인트에서 `logic._load_strata()`를 직접 호출해 단일 캐시를 공유한다.
+파일 없을 때 HTTPException(503) 변환은 엔드포인트 내 try/except로 처리한다.
 
 ```python
-_STRATA_CACHE_API: dict | None = None
+# api.py — _STRATA_CACHE_API, _load_strata_once() 제거
 
-def _load_strata_once() -> dict:
-    global _STRATA_CACHE_API
-    if _STRATA_CACHE_API is None:
-        with open(_STRATA_PATH, encoding="utf-8") as f:
-            _STRATA_CACHE_API = json.load(f)
-    return _STRATA_CACHE_API
+@app.post("/build-cast")
+async def build_cast(req: BuildCastRequest):
+    try:
+        data = _load_strata()          # logic.py의 단일 캐시 공유
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=503,
+            detail="strata 데이터가 없습니다. scripts/build_strata.py를 먼저 실행하세요.",
+        )
+    ...
 ```
 
 ---
@@ -89,8 +104,14 @@ M1만 캐싱하면 "같은 코드에 다른 페르소나 조합을 테스트"하
 `(코드 해시 + task)` 조합을 캐시 키로 사용해 M1 결과(ui_map)만 저장한다.
 strata를 바꿔 재분석할 때 M1 LLM 2번을 건너뛰고 M3부터 실행한다.
 
+> **코드 리뷰 피드백**: "제한 없는 딕셔너리로 사용할 경우 메모리 누수 위험이 있다. 캐시 크기를 제한할 수 있는 구조를 계획에 포함하는 것이 좋다."
+
+캐시 크기를 50개로 제한해 메모리 누수를 방지한다.
+Python 3.7+ dict는 삽입 순서 보장이므로 별도 의존성 없이 FIFO 제거가 가능하다.
+
 ```python
 _UI_MAP_CACHE: dict = {}
+_UI_MAP_CACHE_MAX = 50
 
 async def run_pipeline(codebase, strata_keys, task):
     m1_key = hashlib.md5(
@@ -100,7 +121,9 @@ async def run_pipeline(codebase, strata_keys, task):
     if m1_key in _UI_MAP_CACHE:
         ui_map = _UI_MAP_CACHE[m1_key]   # M1 LLM 건너뜀
     else:
-        ui_map = analyze_code(codebase[0]["content"], task)
+        ui_map = await analyze_code_async(codebase[0]["content"], task)
+        if len(_UI_MAP_CACHE) >= _UI_MAP_CACHE_MAX:
+            _UI_MAP_CACHE.pop(next(iter(_UI_MAP_CACHE)))  # 가장 오래된 항목 제거
         _UI_MAP_CACHE[m1_key] = ui_map
 
     # M3, M4는 항상 실행 (strata마다 다른 결과)

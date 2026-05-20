@@ -2,6 +2,27 @@ export type Screen        = 'source' | 'target_select' | 'progress' | 'result'
 export type SourceMode    = 'file' | 'localhost' | 'url'
 export type ResultSection = 'tldr' | 'issues' | 'fixes' | 'code'
 
+export interface FlowEdge {
+  source: string
+  target: string
+}
+
+export interface PerScreenIssue {
+  element: string
+  reason: string
+  count: number
+}
+
+export interface PerScreenResult {
+  friction_rate: number
+  risk_level: 'ok' | 'warning' | 'critical'
+  think_aloud: string
+  issues: PerScreenIssue[]
+  fix_prompts: string[]
+}
+
+export type EdgeDropout = Record<string, number>
+
 export interface PreviewPersona {
   age: number
   occupation: string
@@ -45,6 +66,8 @@ export interface AnalysisResult {
   source_code?: string
   preview_html?: string
   issues_summary: IssuesSummary
+  per_screen?: Record<string, PerScreenResult>
+  edge_dropout?: EdgeDropout
 }
 
 export interface AppContextValue {
@@ -63,6 +86,9 @@ export interface AppContextValue {
   setSourceUrl: (v: string) => void
   taskDesc: string
   setTaskDesc: (v: string) => void
+
+  flowEdges: FlowEdge[]
+  setFlowEdges: (v: FlowEdge[]) => void
 
   selectedAgeGroup: string
   setSelectedAgeGroup: (v: string) => void

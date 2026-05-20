@@ -1,4 +1,4 @@
-import type { AnalysisResult, PreviewPersona } from '@/types'
+import type { AnalysisResult, PreviewPersona, FlowEdge } from '@/types'
 
 export interface BuildCastParams {
   age_group: string
@@ -30,16 +30,15 @@ export interface AnalyzeParams {
   strataKeys: string[]
   task: string
   files?: File[]
-  targetUrl?: string
+  flowEdges?: FlowEdge[]
 }
 
 export async function analyze(params: AnalyzeParams): Promise<AnalysisResult> {
   const formData = new FormData()
   formData.append('strata_keys', JSON.stringify(params.strataKeys))
   formData.append('task', params.task || '서비스 탐색하기')
-  if (params.targetUrl) {
-    formData.append('target_url', params.targetUrl)
-  } else if (params.files) {
+  formData.append('flow_edges', JSON.stringify(params.flowEdges ?? []))
+  if (params.files) {
     for (const file of params.files) formData.append('files', file)
   }
   const res = await fetch('/analyze', { method: 'POST', body: formData })

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import type {
   AppContextValue, Screen, SourceMode, ResultSection,
-  AnalysisResult, PreviewPersona,
+  AnalysisResult, PreviewPersona, FlowEdge,
 } from '@/types'
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -14,6 +14,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sourcePath, setSourcePath]           = useState('')
   const [sourceUrl, setSourceUrl]             = useState('')
   const [taskDesc, setTaskDesc]               = useState('')
+  const [flowEdges, setFlowEdges]             = useState<FlowEdge[]>([])
   const [selectedAgeGroup, setSelectedAgeGroup] = useState('')
   const [selectedSex, setSelectedSex]         = useState('')
   const [selectedEducation, setSelectedEducation] = useState('')
@@ -35,6 +36,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSourcePath('')
     setSourceUrl('')
     setTaskDesc('')
+    setFlowEdges([])
     setSelectedAgeGroup('')
     setSelectedSex('')
     setSelectedEducation('')
@@ -58,6 +60,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sourcePath, setSourcePath,
       sourceUrl, setSourceUrl,
       taskDesc, setTaskDesc,
+      flowEdges, setFlowEdges,
       selectedAgeGroup, setSelectedAgeGroup,
       selectedSex, setSelectedSex,
       selectedEducation, setSelectedEducation,

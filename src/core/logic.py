@@ -84,7 +84,13 @@ async def run_pipeline(
             weights.append(weight)
             sim_tasks.append(_simulate_one(persona, ui_map, task, sem))
 
-    results = list(await asyncio.gather(*sim_tasks))
+    raw = await asyncio.gather(*sim_tasks, return_exceptions=True)
+    pairs = [(r, w) for r, w in zip(raw, weights) if not isinstance(r, Exception)]
+    if not pairs:
+        raise ValueError("모든 시뮬레이션이 실패했습니다.")
+    results, weights = zip(*pairs)
+    results = list(results)
+    weights = list(weights)
     results = _enrich_with_line_numbers(results, ui_map.get("components", []))
 
     return build_scorer_output_v2(

@@ -96,5 +96,6 @@ async def run_simulation_for_persona(persona: dict, ui_map: dict, task: str) -> 
         response_format={"type": "json_object"},
         temperature=0.7,
         max_tokens=800,
+        timeout=30,
     )
     return _safe_parse(response.choices[0].message.content)

@@ -22,6 +22,7 @@ app = FastAPI(title="PersonaLab API")
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _METRO_PROVINCES = {"서울", "경기", "인천"}
+_STRATA_CACHE_API: dict | None = None
 
 
 _SSRF_BLOCKED = (
@@ -57,13 +58,16 @@ def _groq_client() -> OpenAI:
 
 
 def _load_strata_once() -> dict:
-    if not _STRATA_PATH.exists():
-        raise HTTPException(
-            status_code=503,
-            detail="strata 데이터가 없습니다. scripts/build_strata.py를 먼저 실행하세요.",
-        )
-    with open(_STRATA_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    global _STRATA_CACHE_API
+    if _STRATA_CACHE_API is None:
+        if not _STRATA_PATH.exists():
+            raise HTTPException(
+                status_code=503,
+                detail="strata 데이터가 없습니다. scripts/build_strata.py를 먼저 실행하세요.",
+            )
+        with open(_STRATA_PATH, encoding="utf-8") as f:
+            _STRATA_CACHE_API = json.load(f)
+    return _STRATA_CACHE_API
 
 
 class BuildCastRequest(BaseModel):

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from openai import OpenAI
@@ -102,7 +103,7 @@ def generate_preview_html(source_code: str) -> str:
     except Exception:
         return ""
 
-def analyze_code(source_code: str, task: str) -> dict:
+def _analyze_ui(source_code: str, task: str) -> dict:
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
@@ -116,5 +117,19 @@ def analyze_code(source_code: str, task: str) -> dict:
         result.get("components", []),
         result.get("potential_issues", [])
     )
+    return result
+
+
+def analyze_code(source_code: str, task: str) -> dict:
+    result = _analyze_ui(source_code, task)
     result["preview_html"] = generate_preview_html(source_code)
     return result
+
+
+async def analyze_code_async(source_code: str, task: str) -> dict:
+    ui_result, preview = await asyncio.gather(
+        asyncio.to_thread(_analyze_ui, source_code, task),
+        asyncio.to_thread(generate_preview_html, source_code),
+    )
+    ui_result["preview_html"] = preview
+    return ui_result

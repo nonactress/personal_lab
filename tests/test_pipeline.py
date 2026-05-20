@@ -40,10 +40,10 @@ async def test_run_pipeline_returns_friction_map():
     strata_keys = ["30대_대졸_남자"]
 
     with patch("src.core.logic._load_strata", return_value=SAMPLE_STRATA_DATA), \
-         patch("src.core.logic.analyze_code", return_value={
+         patch("src.core.logic.analyze_code_async", new=AsyncMock(return_value={
              "components": [{"type": "button", "label": "버튼", "line_number": 1, "context": "CTA"}],
              "visual_hierarchy": "없음", "potential_issues": [], "detected_patterns": [], "preview_html": ""
-         }), \
+         })), \
          patch("src.core.logic.run_simulation_for_persona", new=AsyncMock(return_value=FAKE_SIM_RESULT)):
 
         result = await run_pipeline(codebase, strata_keys, "서비스 탐색하기")
@@ -60,6 +60,6 @@ async def test_run_pipeline_raises_on_no_match():
     from src.core.logic import run_pipeline
 
     with patch("src.core.logic._load_strata", return_value=SAMPLE_STRATA_DATA), \
-         patch("src.core.logic.analyze_code", return_value={"components": [], "visual_hierarchy": "", "potential_issues": [], "preview_html": ""}):
+         patch("src.core.logic.analyze_code_async", new=AsyncMock(return_value={"components": [], "visual_hierarchy": "", "potential_issues": [], "preview_html": ""})):
         with pytest.raises(ValueError, match="매칭된 strata 없음"):
             await run_pipeline([{"name": "f", "content": ""}], ["없는_키_남자"])

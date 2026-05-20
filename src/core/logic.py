@@ -2,7 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from src.core.m1_analyzer import analyze_code
+from src.core.m1_analyzer import analyze_code, analyze_code_async
 from src.core.m3_simulation import run_simulation_for_persona
 from src.core.m4_scorer import build_scorer_output_v2
 
@@ -63,7 +63,7 @@ async def run_pipeline(
     task: str = "서비스 탐색하기",
 ) -> dict:
     main_file = codebase[0]
-    ui_map = analyze_code(main_file["content"], task)
+    ui_map = await analyze_code_async(main_file["content"], task)
 
     strata_data = _load_strata()
     matched = _match_strata(strata_data, strata_keys)

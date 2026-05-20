@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from src.core.m4_scorer import build_scorer_output_v2
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _STRATA_CACHE: dict | None = None
+_UI_MAP_CACHE: dict = {}
 
 
 def _load_strata() -> dict:
@@ -63,7 +65,12 @@ async def run_pipeline(
     task: str = "서비스 탐색하기",
 ) -> dict:
     main_file = codebase[0]
-    ui_map = await analyze_code_async(main_file["content"], task)
+    _m1_key = hashlib.md5((main_file["content"] + task).encode()).hexdigest()
+    if _m1_key in _UI_MAP_CACHE:
+        ui_map = _UI_MAP_CACHE[_m1_key]
+    else:
+        ui_map = await analyze_code_async(main_file["content"], task)
+        _UI_MAP_CACHE[_m1_key] = ui_map
 
     strata_data = _load_strata()
     matched = _match_strata(strata_data, strata_keys)

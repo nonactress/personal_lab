@@ -3,7 +3,7 @@ import { useApp } from '@/context/AppContext'
 import { analyze } from '@/lib/api'
 
 const STEPS = [
-  { label: '코드 파싱',        icon: '📂' },
+  { label: '이미지 분석',      icon: '🖼️' },
   { label: '페르소나 매칭',    icon: '🧬' },
   { label: 'UX 시뮬레이션',   icon: '🔍' },
   { label: '리포트 생성',      icon: '📊' },
@@ -13,7 +13,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 export function ProgressScreen() {
   const {
-    files, sourceMode, sourcePort, sourcePath, sourceUrl,
+    files, flowEdges,
     matchedStrata, taskDesc, totalCount,
     setResult, setScreen, setError, setLiveThought, liveThought,
   } = useApp()
@@ -33,17 +33,12 @@ export function ProgressScreen() {
       setStatusStep(3)
       setLiveThought(`${totalCount.toLocaleString()}명 규모 페르소나가 앱을 살펴보고 있어요…`)
 
-      const targetUrl =
-        sourceMode === 'localhost'
-          ? `http://localhost:${sourcePort}${sourcePath ? '/' + sourcePath.replace(/^\//, '') : ''}`
-          : sourceMode === 'url' ? sourceUrl : undefined
-
       try {
         const result = await analyze({
           strataKeys: matchedStrata,
           task: taskDesc.trim() || '서비스 탐색하기',
-          files: sourceMode === 'file' ? files : undefined,
-          targetUrl,
+          files: files.length > 0 ? files : undefined,
+          flowEdges,
         })
         setStatusStep(4)
         await sleep(300)

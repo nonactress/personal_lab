@@ -1,19 +1,15 @@
 import io
-import ipaddress
 import json
 import os
-import socket
 import zipfile
 from pathlib import Path
 from typing import List, Optional
-from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
-import httpx
 
 from src.core.logic import run_pipeline
 
@@ -22,31 +18,7 @@ app = FastAPI(title="PersonaLab API")
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _METRO_PROVINCES = {"서울", "경기", "인천"}
-
-
-_SSRF_BLOCKED = (
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-)
-
-
-def _validate_url(url: str) -> str:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="URL은 http/https만 허용됩니다.")
-    host = parsed.hostname or ""
-    try:
-        ip = ipaddress.ip_address(socket.gethostbyname(host))
-        if any(ip in net for net in _SSRF_BLOCKED):
-            raise HTTPException(status_code=400, detail="내부 네트워크 접근은 허용되지 않습니다.")
-    except socket.gaierror:
-        raise HTTPException(status_code=400, detail=f"호스트를 확인할 수 없습니다: {host}")
-    return url
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def _groq_client() -> OpenAI:
@@ -139,7 +111,7 @@ async def analyze_endpoint(
     files: Optional[List[UploadFile]] = File(default=None),
     strata_keys: str = Form(...),
     task: str = Form(default="서비스 탐색하기"),
-    target_url: Optional[str] = Form(default=None),
+    flow_edges: str = Form(default="[]"),
 ):
     try:
         try:
@@ -149,37 +121,34 @@ async def analyze_endpoint(
         if not keys:
             raise HTTPException(status_code=400, detail="strata_keys가 비어 있습니다.")
 
-        codebase = []
+        try:
+            edges: list[dict] = json.loads(flow_edges)
+        except (json.JSONDecodeError, TypeError):
+            edges = []
 
-        if target_url:
-            if not target_url.startswith(("http://", "https://")):
-                target_url = "https://" + target_url
-            _validate_url(target_url)
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.get(target_url)
-                codebase.append({"name": target_url, "content": resp.text})
-        elif files:
+        images: list[dict] = []
+        if files:
             for file in files:
                 content = await file.read()
-                if file.filename.endswith(".zip"):
+                ext = Path(file.filename).suffix.lower()
+                if ext == ".zip":
                     with zipfile.ZipFile(io.BytesIO(content)) as z:
                         for name in z.namelist():
-                            if not name.endswith("/") and "__MACOSX" not in name:
+                            if name.endswith("/") or "__MACOSX" in name:
+                                continue
+                            if Path(name).suffix.lower() in _IMAGE_EXTENSIONS:
                                 with z.open(name) as f:
-                                    try:
-                                        codebase.append({"name": name, "content": f.read().decode("utf-8")})
-                                    except Exception:
-                                        continue
-                else:
-                    try:
-                        codebase.append({"name": file.filename, "content": content.decode("utf-8")})
-                    except Exception:
-                        continue
+                                    images.append({"name": Path(name).name, "bytes": f.read()})
+                elif ext in _IMAGE_EXTENSIONS:
+                    images.append({"name": file.filename, "bytes": content})
 
-        if not codebase:
-            raise HTTPException(status_code=400, detail="분석 가능한 소스가 없습니다.")
+        if not images:
+            raise HTTPException(
+                status_code=400,
+                detail="분석 가능한 이미지가 없습니다. .png/.jpg/.webp 파일을 업로드하세요.",
+            )
 
-        result = await run_pipeline(codebase, keys, task)
+        result = await run_pipeline(images, edges, keys, task)
         return result
 
     except HTTPException:
@@ -189,7 +158,7 @@ async def analyze_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+app.mount("/", StaticFiles(directory="frontend/dist", html=True, check_dir=False), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

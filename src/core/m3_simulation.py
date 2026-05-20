@@ -54,12 +54,15 @@ def _build_messages(persona: dict, ui_map: dict, task: str) -> list:
         cultural_background=persona.get("cultural_background", ""),
         skills_and_expertise=persona.get("skills_and_expertise", ""),
     )
+    screen_summary = ui_map.get("screen_summary", "")
     components_desc = "\n".join(
-        f"- [{c['type']}] '{c['label']}' (line {c['line_number']}): {c['context']}"
+        f"- [{c['type']}] '{c['label']}': {c['context']}"
         for c in ui_map.get("components", [])
     )
     user_content = (
-        f"태스크: {task}\n\nUI 요소:\n{components_desc}\n\n"
+        f"태스크: {task}\n\n"
+        f"화면 설명:\n{screen_summary}\n\n"
+        f"UI 요소:\n{components_desc}\n\n"
         f"시각적 위계: {ui_map.get('visual_hierarchy', '없음')}\n"
         f"잠재 이슈: {', '.join(ui_map.get('potential_issues', []))}"
     )

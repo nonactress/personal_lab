@@ -19,7 +19,10 @@ export async function buildCast(params: BuildCastParams): Promise<BuildCastRespo
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  if (!res.ok) throw new Error('build-cast')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { detail?: string }).detail || 'build-cast')
+  }
   return res.json()
 }
 
@@ -40,6 +43,9 @@ export async function analyze(params: AnalyzeParams): Promise<AnalysisResult> {
     for (const file of params.files) formData.append('files', file)
   }
   const res = await fetch('/analyze', { method: 'POST', body: formData })
-  if (!res.ok) throw new Error('backend')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { detail?: string }).detail || 'backend')
+  }
   return res.json()
 }

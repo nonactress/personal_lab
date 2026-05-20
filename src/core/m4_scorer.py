@@ -1,3 +1,4 @@
+import logging
 import os
 from collections import defaultdict
 from openai import OpenAI
@@ -6,11 +7,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+logger = logging.getLogger(__name__)
+
+_client: OpenAI | None = None
+
+
 def _groq_client() -> OpenAI:
-    return OpenAI(
-        api_key=os.getenv("GROQ_API_KEY"),
-        base_url="https://api.groq.com/openai/v1",
-    )
+    global _client
+    if _client is None:
+        _client = OpenAI(
+            api_key=os.getenv("GROQ_API_KEY"),
+            base_url="https://api.groq.com/openai/v1",
+        )
+    return _client
 
 
 _FIX_PROMPT_SYSTEM = """당신은 UX 개선 전문가다. 주어진 UX 이슈를 분석하고 Cursor/Claude 같은 AI IDE에 붙여넣을 수 있는 명확한 Fix Prompt를 한국어로 작성하라.

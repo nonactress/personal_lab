@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 from pathlib import Path
 
 from src.core.m1_analyzer import analyze_image
@@ -8,13 +9,16 @@ from src.core.m4_scorer import build_scorer_output_v2
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _STRATA_CACHE: dict | None = None
+_STRATA_LOCK = threading.Lock()
 
 
 def _load_strata() -> dict:
     global _STRATA_CACHE
     if _STRATA_CACHE is None:
-        with open(_STRATA_PATH, encoding="utf-8") as f:
-            _STRATA_CACHE = json.load(f)
+        with _STRATA_LOCK:
+            if _STRATA_CACHE is None:
+                with open(_STRATA_PATH, encoding="utf-8") as f:
+                    _STRATA_CACHE = json.load(f)
     return _STRATA_CACHE
 
 

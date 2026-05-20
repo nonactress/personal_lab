@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -87,6 +90,7 @@ def _safe_parse(raw: str) -> dict:
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:
+            logger.warning("JSON 파싱 실패, fallback 반환. raw=%s", raw[:200])
             return fallback
 
 

@@ -49,12 +49,18 @@ except Exception:
     client = None
 
 
+def _get_client() -> OpenAI:
+    if client is None:
+        raise RuntimeError("Groq 클라이언트 미초기화. GROQ_API_KEY를 확인하세요.")
+    return client
+
+
 def analyze_image(image_bytes: bytes, filename: str, task: str) -> dict:
     ext = filename.rsplit(".", 1)[-1].lower()
     mime = _MIME_MAP.get(ext, "image/png")
     b64 = base64.b64encode(image_bytes).decode()
 
-    response = client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model="llama-3.2-11b-vision-preview",
         messages=[
             {"role": "system", "content": M1_SYSTEM_PROMPT},

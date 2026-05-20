@@ -52,7 +52,10 @@ PATTERN_TO_CHUNKS: dict = {
 
 def load_persona_params(cohort: str) -> dict:
     path = Path(__file__).parent / "persona_params" / f"{cohort}.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ValueError(f"코호트 파라미터 없음: {cohort}")
 
 def get_relevant_chunks(ui_patterns: list) -> str:
     chunk_ids = set()

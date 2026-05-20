@@ -43,6 +43,7 @@ class BuildCastRequest(BaseModel):
     sex: str
     education: str
     region: str = "모두"
+    occupation: str = "모두"
 
 
 @app.get("/health")
@@ -74,9 +75,17 @@ async def build_cast(req: BuildCastRequest):
             if req.region == "수도권" and personas:
                 metro = [p for p in personas if p["province"] in _METRO_PROVINCES]
                 count = int(count * len(metro) / len(personas)) if metro else 0
+                personas = metro
             elif req.region == "지방" and personas:
                 non_metro = [p for p in personas if p["province"] not in _METRO_PROVINCES]
                 count = int(count * len(non_metro) / len(personas)) if non_metro else 0
+                personas = non_metro
+
+            if req.occupation != "모두" and personas:
+                kw = req.occupation.strip().lower()
+                filtered = [p for p in personas if kw in p.get("occupation", "").lower()]
+                count = int(count * len(filtered) / len(personas)) if filtered else 0
+                personas = filtered
 
             if count == 0:
                 continue
@@ -84,13 +93,18 @@ async def build_cast(req: BuildCastRequest):
             matched_keys.append(key)
             total_count += count
 
-            if personas:
-                p = personas[0]
+            for p in personas[:3]:
+                if len(preview_personas) >= 3:
+                    break
                 preview_personas.append({
                     "age": p["age"],
                     "occupation": p["occupation"],
                     "province": p["province"],
-                    "persona": p["persona"][:120] + "…" if len(p["persona"]) > 120 else p["persona"],
+                    "persona": p.get("persona", ""),
+                    "professional_persona": p.get("professional_persona", ""),
+                    "hobbies_and_interests": p.get("hobbies_and_interests", ""),
+                    "cultural_background": p.get("cultural_background", ""),
+                    "skills_and_expertise": p.get("skills_and_expertise", ""),
                 })
 
         return {

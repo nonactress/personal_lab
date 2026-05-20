@@ -1,7 +1,8 @@
 import logging
 import os
+import time
 from collections import defaultdict
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,18 +23,22 @@ def _groq_client() -> OpenAI:
     return _client
 
 
-_FIX_PROMPT_SYSTEM = """당신은 UX 개선 전문가다. 주어진 UX 이슈를 분석하고 Cursor/Claude 같은 AI IDE에 붙여넣을 수 있는 명확한 Fix Prompt를 한국어로 작성하라.
+_FIX_PROMPT_SYSTEM = """[언어 규칙 — 최우선]
+모든 출력은 반드시 한국어로 작성하라. 영어·외국어 사용 금지.
 
-형식:
-[페르소나 UX 이슈 — {element}]
-문제: {reason}
+[역할]
+UX 개선 전문가. 주어진 UX 이슈를 분석하고 Cursor/Claude 같은 AI IDE에 붙여넣을 수 있는 실행 가능한 Fix Prompt를 한국어로 작성하라.
 
-Fix: 구체적인 시각적 수정 방법을 1~3문장으로 설명. 어떤 요소를 어떻게 바꿔야 하는지 명시.
+[출력 형식]
+[페르소나 UX 이슈 — <요소명>]
+문제: <이슈 한 문장>
 
-규칙:
-- 이슈 맥락에 맞는 구체적 수정 방향 제시
+Fix: <구체적인 시각적 수정 방법 1~3문장. 어떤 요소를 어떻게 바꿔야 하는지 명시.>
+
+[규칙]
+- 이슈 맥락에 맞는 구체적 수정 방향만 제시
 - 짧고 실행 가능하게
-- 모든 텍스트는 한국어로"""
+- 모든 텍스트는 한국어"""
 
 
 def _risk_from_rate(rate: float) -> str:
@@ -124,23 +129,31 @@ def _aggregate_issues(results: list) -> list:
 
 
 def _generate_fix_prompt(element: str, reason: str) -> str:
-    try:
-        client = _groq_client()
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": _FIX_PROMPT_SYSTEM},
-                {"role": "user", "content": f"이슈 요소: {element}\n문제: {reason}"},
-            ],
-            max_tokens=256,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception:
-        return (
-            f"[UX 이슈 — {element}]\n"
-            f"문제: {reason}\n\n"
-            f"Fix: {element} 요소의 접근성과 가시성을 높이도록 크기, 색상 대비, 레이블을 개선해줘."
-        )
+    client = _groq_client()
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": _FIX_PROMPT_SYSTEM},
+                    {"role": "user", "content": f"이슈 요소: {element}\n문제: {reason}"},
+                ],
+                max_tokens=200,
+            )
+            return response.choices[0].message.content.strip()
+        except RateLimitError:
+            if attempt == 2:
+                break
+            wait = 10 * (attempt + 1)
+            logger.info("Fix prompt rate limit — %ds 대기 후 재시도", wait)
+            time.sleep(wait)
+        except Exception:
+            break
+    return (
+        f"[UX 이슈 — {element}]\n"
+        f"문제: {reason}\n\n"
+        f"Fix: {element} 요소의 접근성과 가시성을 높이도록 크기, 색상 대비, 레이블을 개선해줘."
+    )
 
 
 def _score_screen(results: list, weights: list) -> dict:

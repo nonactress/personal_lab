@@ -28,6 +28,10 @@ export interface PreviewPersona {
   occupation: string
   province: string
   persona?: string
+  professional_persona?: string
+  hobbies_and_interests?: string
+  cultural_background?: string
+  skills_and_expertise?: string
 }
 
 export interface FrictionMapItem {
@@ -98,6 +102,8 @@ export interface AppContextValue {
   setSelectedEducation: (v: string) => void
   selectedRegion: string
   setSelectedRegion: (v: string) => void
+  selectedOccupation: string
+  setSelectedOccupation: (v: string) => void
   matchedStrata: string[]
   setMatchedStrata: (v: string[]) => void
   totalCount: number

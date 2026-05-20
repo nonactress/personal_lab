@@ -57,7 +57,7 @@ async def run_pipeline(
     if not matched:
         raise ValueError(f"매칭된 strata 없음: {strata_keys}")
 
-    sem = asyncio.Semaphore(25)
+    sem = asyncio.Semaphore(3)
 
     all_tasks: list = []
     screen_ranges: dict[str, tuple[int, int]] = {}

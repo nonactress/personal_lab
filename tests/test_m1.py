@@ -83,7 +83,7 @@ def test_analyze_image_uses_vision_model():
         analyze_image(SAMPLE_PNG, "home.png", "로그인하기")
 
     call_kwargs = mock_client.chat.completions.create.call_args
-    assert call_kwargs.kwargs["model"] == "llama-3.2-11b-vision-preview"
+    assert call_kwargs.kwargs["model"] == "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
 def test_analyze_image_sends_base64_image():

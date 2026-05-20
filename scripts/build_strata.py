@@ -68,7 +68,7 @@ def build_strata():
 
         strata[key]["count"] += 1
 
-        if len(strata[key]["personas"]) < 3:
+        if len(strata[key]["personas"]) < 10:
             strata[key]["personas"].append({
                 "age": row["age"],
                 "occupation": row.get("occupation", ""),

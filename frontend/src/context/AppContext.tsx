@@ -19,6 +19,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedSex, setSelectedSex]         = useState('')
   const [selectedEducation, setSelectedEducation] = useState('')
   const [selectedRegion, setSelectedRegion]   = useState('모두')
+  const [selectedOccupation, setSelectedOccupation] = useState('')
   const [matchedStrata, setMatchedStrata]     = useState<string[]>([])
   const [totalCount, setTotalCount]           = useState(0)
   const [previewPersonas, setPreviewPersonas] = useState<PreviewPersona[]>([])
@@ -41,6 +42,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSelectedSex('')
     setSelectedEducation('')
     setSelectedRegion('모두')
+    setSelectedOccupation('')
     setMatchedStrata([])
     setTotalCount(0)
     setPreviewPersonas([])
@@ -65,6 +67,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectedSex, setSelectedSex,
       selectedEducation, setSelectedEducation,
       selectedRegion, setSelectedRegion,
+      selectedOccupation, setSelectedOccupation,
       matchedStrata, setMatchedStrata,
       totalCount, setTotalCount,
       previewPersonas, setPreviewPersonas,

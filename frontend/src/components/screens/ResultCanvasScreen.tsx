@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   type Node,
   type Edge,
@@ -20,15 +21,21 @@ import { NodeDetailPanel } from '@/components/result/NodeDetailPanel'
 import type { PerScreenResult } from '@/types'
 
 const RISK_BORDER: Record<string, string> = {
-  ok: '#10b981',
-  warning: '#f59e0b',
+  ok:       '#10b981',
+  warning:  '#f59e0b',
   critical: '#ef4444',
 }
 
 const RISK_BG: Record<string, string> = {
-  ok: 'rgba(16,185,129,0.15)',
-  warning: 'rgba(245,158,11,0.15)',
-  critical: 'rgba(239,68,68,0.15)',
+  ok:       'rgba(16,185,129,0.15)',
+  warning:  'rgba(245,158,11,0.20)',
+  critical: 'rgba(239,68,68,0.20)',
+}
+
+const RISK_RING: Record<string, string> = {
+  ok:       'rgba(16,185,129,0.25)',
+  warning:  'rgba(245,158,11,0.25)',
+  critical: 'rgba(239,68,68,0.25)',
 }
 
 interface ResultNodeData extends Record<string, unknown> {
@@ -41,32 +48,62 @@ function ResultNode({ data, selected }: NodeProps) {
   const d = data as ResultNodeData
   const risk = d.screenData?.risk_level ?? 'ok'
   const frictionPct = Math.round((d.screenData?.friction_rate ?? 0) * 100)
+  const border = RISK_BORDER[risk]
 
   return (
     <div
-      className="rounded-lg overflow-hidden shadow-lg transition-all"
+      className="rounded-xl overflow-hidden cursor-pointer transition-all"
       style={{
-        width: 130,
-        border: `2px solid ${RISK_BORDER[risk]}`,
-        boxShadow: selected ? `0 0 0 3px ${RISK_BORDER[risk]}40` : undefined,
+        width: 180,
+        border: `2px solid ${border}`,
+        boxShadow: selected
+          ? `0 0 0 4px ${RISK_RING[risk]}, 0 8px 24px -8px rgb(0 0 0 / 0.12)`
+          : '0 1px 2px 0 rgb(0 0 0 / 0.04)',
+        background: 'white',
       }}
     >
-      <Handle type="target" position={Position.Left} className="!opacity-0" />
-      <Handle type="source" position={Position.Right} className="!opacity-0" />
-      <div className="relative">
-        <img
-          src={d.objectUrl}
-          alt={d.label}
-          style={{ width: 130, height: 96, objectFit: 'cover', display: 'block' }}
-          draggable={false}
-        />
+      <Handle type="target" position={Position.Left}   className="!opacity-0 !pointer-events-none" />
+      <Handle type="source" position={Position.Right}  className="!opacity-0 !pointer-events-none" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0 !pointer-events-none" />
+
+      {/* Thumbnail + overlay */}
+      <div className="relative" style={{ height: 120 }}>
+        {d.objectUrl ? (
+          <img
+            src={d.objectUrl}
+            alt={d.label}
+            style={{ width: 180, height: 120, objectFit: 'cover', display: 'block' }}
+            draggable={false}
+          />
+        ) : (
+          <div className="ss-stripe bg-gray-100 w-full h-full flex items-center justify-center">
+            <span className="font-mono text-[10px] text-gray-500">{d.label}</span>
+          </div>
+        )}
+        {/* Color tint overlay */}
         <div className="absolute inset-0" style={{ backgroundColor: RISK_BG[risk] }} />
+        {/* Severity dot */}
+        <span
+          className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-white shadow"
+          style={{ backgroundColor: border }}
+        />
+        {selected && (
+          <span
+            className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-white shadow-sm"
+            style={{ color: border }}
+          >
+            SELECTED
+          </span>
+        )}
       </div>
+
+      {/* Label bar */}
       <div
-        className="px-1.5 py-1 text-xs font-medium text-white truncate"
-        style={{ backgroundColor: RISK_BORDER[risk] }}
+        className="px-2.5 py-1.5 flex items-center justify-between text-white"
+        style={{ backgroundColor: border }}
       >
-        {d.label} · {frictionPct}%
+        <span className="font-mono text-[11px] truncate font-medium flex-1">{d.label}</span>
+        <span className="text-[10px] font-bold tabular-nums ml-1">{frictionPct}%</span>
       </div>
     </div>
   )
@@ -83,7 +120,17 @@ function DropoutEdge({
   const color =
     dropout >= 0.7 ? '#ef4444' :
     dropout >= 0.4 ? '#f59e0b' :
-    '#6366f1'
+    '#3b82f6'
+
+  const borderColor =
+    dropout >= 0.7 ? '#fca5a5' :
+    dropout >= 0.4 ? '#fcd34d' :
+    '#93c5fd'
+
+  const textColor =
+    dropout >= 0.7 ? '#b91c1c' :
+    dropout >= 0.4 ? '#92400e' :
+    '#1e40af'
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
@@ -92,26 +139,20 @@ function DropoutEdge({
 
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        style={{ stroke: color, strokeWidth: 2 }}
-      />
+      <BaseEdge id={id} path={edgePath} style={{ stroke: color, strokeWidth: 2.5 }} />
       <EdgeLabelRenderer>
         <div
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
             pointerEvents: 'none',
+            borderColor,
+            color: textColor,
           }}
-          className={[
-            'px-1.5 py-0.5 rounded text-xs font-semibold text-white',
-            dropout >= 0.7 ? 'bg-red-500' :
-            dropout >= 0.4 ? 'bg-amber-500' :
-            'bg-indigo-500',
-          ].join(' ')}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border shadow-sm"
         >
-          ↓{pct}%
+          <span style={{ color: textColor, fontSize: 10 }}>↓</span>
+          <span style={{ color: textColor, fontSize: 10, fontWeight: 700 }}>{pct}%</span>
         </div>
       </EdgeLabelRenderer>
     </>
@@ -128,6 +169,8 @@ export function ResultCanvasScreen() {
 
   const perScreen = result?.per_screen ?? {}
   const edgeDropout = result?.edge_dropout ?? {}
+  const abandonmentPct = Math.round((result?.abandonment_rate ?? 0) * 100)
+  const overallRisk = result?.risk_level ?? 'ok'
 
   useEffect(() => {
     const map: Record<string, string> = {}
@@ -140,7 +183,7 @@ export function ResultCanvasScreen() {
     return files.map((f, i) => ({
       id: f.name,
       type: 'resultNode',
-      position: { x: i * 220 + 40, y: 100 },
+      position: { x: i * 260 + 60, y: 120 },
       data: {
         label: f.name,
         objectUrl: objectUrls[f.name] ?? '',
@@ -160,7 +203,7 @@ export function ResultCanvasScreen() {
         target: fe.target,
         type: 'dropoutEdge',
         data: { dropout: edgeDropout[key] ?? 0 },
-        markerEnd: { type: MarkerType.ArrowClosed },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280' },
       }
     })
   }, [flowEdges, edgeDropout])
@@ -178,40 +221,120 @@ export function ResultCanvasScreen() {
     try { await navigator.clipboard.writeText(text) } catch {}
   }
 
+  const riskPillStyle =
+    overallRisk === 'critical' ? 'bg-rose-50 border-rose-200 text-rose-700' :
+    overallRisk === 'warning'  ? 'bg-amber-50 border-amber-200 text-amber-700' :
+    'bg-emerald-50 border-emerald-200 text-emerald-700'
+
+  const riskDotStyle =
+    overallRisk === 'critical' ? 'bg-rose-500' :
+    overallRisk === 'warning'  ? 'bg-amber-500' :
+    'bg-emerald-500'
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950">
+    <div className="flex flex-col h-screen bg-white overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
-        <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
-          ← 새 분석
+      <div className="px-5 py-3 border-b border-gray-200 flex items-center gap-3 flex-shrink-0 bg-white">
+        <button
+          onClick={reset}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-100"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
+          </svg>
+          새 분석
         </button>
-        <div className="text-sm font-semibold text-slate-300">
-          이탈률 {Math.round((result?.abandonment_rate ?? 0) * 100)}%
-          <span className="ml-2 text-xs text-slate-500 font-normal">
-            ({result?.total_simulated ?? 0}명 시뮬)
+
+        <div className="h-5 w-px bg-gray-200"></div>
+
+        <div className="flex items-center gap-2 text-xs whitespace-nowrap">
+          <span className="font-mono text-gray-500">
+            {'분석 완료'}
+          </span>
+          <span className="text-gray-300">·</span>
+          <span className="font-mono text-gray-500">
+            {files.length} screens · {flowEdges.length} edges
           </span>
         </div>
+
+        <div className="flex-1"></div>
+
+        {/* Overall friction pill */}
+        <div className={['inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border whitespace-nowrap', riskPillStyle].join(' ')}>
+          <span className={['w-1.5 h-1.5 rounded-full', riskDotStyle].join(' ')}></span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider">최종 이탈률</span>
+          <span className="text-sm font-bold tabular-nums">{abandonmentPct}%</span>
+        </div>
+
         <button
           onClick={exportResult}
-          className="text-sm text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-3 py-1"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 border border-gray-200"
         >
-          ⤓ Export
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Export
+        </button>
+        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-gray-900 text-white hover:bg-gray-800">
+          Share
         </button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
-        <div className="w-60 flex-shrink-0 border-r border-slate-800 overflow-y-auto">
+        <aside className="w-[280px] flex-shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
           <NodeDetailPanel
             selectedScreen={selectedScreen}
             perScreen={perScreen}
             result={result}
             onClose={() => setSelectedScreen(null)}
           />
-        </div>
+        </aside>
 
         {/* Result canvas */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative dot-grid">
+          {/* Hint */}
+          <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white shadow-card border border-gray-200 text-[10px] text-gray-500 font-mono whitespace-nowrap pointer-events-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+            <span>노드 클릭 → 좌측 패널 / 빈 공간 클릭 → 초기화</span>
+          </div>
+
+          {/* Legend */}
+          <div className="absolute bottom-3 left-3 z-30 rounded-lg bg-white/95 backdrop-blur shadow-card border border-gray-200 px-3 py-2 pointer-events-none">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Severity</div>
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-emerald-500"></span>
+                <span className="text-gray-700">ok</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-amber-500"></span>
+                <span className="text-gray-700">warning</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-rose-500"></span>
+                <span className="text-gray-700">critical</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Summary chip */}
+          <div className="absolute bottom-3 right-3 z-30 rounded-lg bg-white/95 backdrop-blur shadow-card border border-gray-200 px-3 py-2 flex items-center gap-3 pointer-events-none">
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-500">시뮬</div>
+              <div className="text-xs font-bold tabular-nums text-gray-900">
+                {(result?.total_simulated ?? 0).toLocaleString()}명
+              </div>
+            </div>
+            <div className="h-7 w-px bg-gray-200"></div>
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-500">strata</div>
+              <div className="text-xs font-bold tabular-nums text-gray-900">
+                {result?.total_simulated ? Math.max(1, Math.round(result.total_simulated / 450)) : '—'}
+              </div>
+            </div>
+          </div>
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -223,10 +346,10 @@ export function ResultCanvasScreen() {
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable
-            className="bg-slate-950"
+            style={{ background: 'transparent' }}
           >
-            <Background color="#334155" gap={20} size={1} />
-            <Controls className="!bg-slate-900 !border-slate-700" />
+            <Background variant={BackgroundVariant.Dots} color="#d4d4d8" gap={18} size={1} />
+            <Controls />
           </ReactFlow>
         </div>
       </div>

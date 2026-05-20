@@ -5,6 +5,7 @@ export interface BuildCastParams {
   sex: string
   education: string
   region: string
+  occupation?: string
 }
 
 export interface BuildCastResponse {

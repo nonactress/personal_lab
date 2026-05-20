@@ -10,6 +10,7 @@ from src.core.m4_scorer import build_scorer_output_v2
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _STRATA_CACHE: dict | None = None
 _UI_MAP_CACHE: dict = {}
+_UI_MAP_CACHE_MAX = 50
 
 
 def _load_strata() -> dict:
@@ -70,6 +71,8 @@ async def run_pipeline(
         ui_map = _UI_MAP_CACHE[_m1_key]
     else:
         ui_map = await analyze_code_async(main_file["content"], task)
+        if len(_UI_MAP_CACHE) >= _UI_MAP_CACHE_MAX:
+            _UI_MAP_CACHE.pop(next(iter(_UI_MAP_CACHE)))
         _UI_MAP_CACHE[_m1_key] = ui_map
 
     strata_data = _load_strata()

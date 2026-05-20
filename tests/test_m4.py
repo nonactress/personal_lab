@@ -68,12 +68,13 @@ def test_aggregate_friction_map_empty():
     assert total == 0
 
 
-def test_build_scorer_output_v2_includes_friction_map():
+@pytest.mark.asyncio
+async def test_build_scorer_output_v2_includes_friction_map():
     results = [
         {"confusion_events": [{"element": "버튼", "reason": "안 보임", "abandoned": False}], "final_abandoned": False, "think_aloud": "어렵다", "developer_assumption": "쉽다"},
     ]
     weights = [100.0]
-    out = build_scorer_output_v2(results, weights, source_code="<button>버튼</button>")
+    out = await build_scorer_output_v2(results, weights, source_code="<button>버튼</button>")
 
     assert "friction_map" in out
     assert "abandonment_rate" in out

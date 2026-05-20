@@ -93,7 +93,7 @@ async def run_pipeline(
     weights = list(weights)
     results = _enrich_with_line_numbers(results, ui_map.get("components", []))
 
-    return build_scorer_output_v2(
+    return await build_scorer_output_v2(
         list(results),
         weights,
         main_file["content"],

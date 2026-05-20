@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from openai import OpenAI
@@ -104,19 +105,19 @@ def _generate_fix_prompt_fallback(issue: dict, cohort: str) -> str:
     )
 
 
-def generate_fix_prompts(simulation_result: dict, source_code: str, cohort: str) -> list:
+async def generate_fix_prompts(simulation_result: dict, source_code: str, cohort: str) -> list:
     top3 = get_top3_issues(simulation_result)
-    prompts = []
-    for issue in top3:
+
+    async def _one(issue: dict) -> str:
         try:
-            prompt = _generate_fix_prompt_llm(issue, source_code, cohort)
+            return await asyncio.to_thread(_generate_fix_prompt_llm, issue, source_code, cohort)
         except Exception:
-            prompt = _generate_fix_prompt_fallback(issue, cohort)
-        prompts.append(prompt)
-    return prompts
+            return _generate_fix_prompt_fallback(issue, cohort)
+
+    return list(await asyncio.gather(*[_one(issue) for issue in top3]))
 
 
-def build_scorer_output(simulation_result: dict, source_code: str, cohort: str = "20대_대학생", preview_html: str = "") -> dict:
+async def build_scorer_output(simulation_result: dict, source_code: str, cohort: str = "20대_대학생", preview_html: str = "") -> dict:
     events = simulation_result.get("confusion_events", [])
     abandoned = simulation_result.get("abandoned", False)
 
@@ -141,7 +142,7 @@ def build_scorer_output(simulation_result: dict, source_code: str, cohort: str =
         "think_aloud": simulation_result.get("think_aloud", ""),
         "think_aloud_steps": simulation_result.get("think_aloud_steps", []),
         "top3": get_top3_issues(simulation_result),
-        "fix_prompts": generate_fix_prompts(simulation_result, source_code, cohort),
+        "fix_prompts": await generate_fix_prompts(simulation_result, source_code, cohort),
         "source_code": source_code,
         "preview_html": preview_html,
     }
@@ -188,7 +189,7 @@ def aggregate_friction_map(
     return friction_map, abandonment_rate, len(results)
 
 
-def build_scorer_output_v2(
+async def build_scorer_output_v2(
     results: list,
     weights: list,
     source_code: str,
@@ -225,7 +226,7 @@ def build_scorer_output_v2(
         "think_aloud_steps": [],
     }
 
-    base = build_scorer_output(combined, source_code, cohort="Nemotron", preview_html=preview_html)
+    base = await build_scorer_output(combined, source_code, cohort="Nemotron", preview_html=preview_html)
     base.update(
         {
             "friction_map": friction_map,

@@ -9,6 +9,7 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
@@ -19,6 +20,7 @@ from src.core.logic import run_pipeline
 
 load_dotenv()
 app = FastAPI(title="PersonaLab API")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 _STRATA_PATH = Path("data/nemotron_strata.json")
 _METRO_PROVINCES = {"서울", "경기", "인천"}

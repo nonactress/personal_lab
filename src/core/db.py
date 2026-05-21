@@ -3,8 +3,7 @@ from pathlib import Path
 import duckdb
 
 _PARQUET = Path("data/nemotron_full.parquet")
-_CONN: duckdb.DuckDBPyConnection | None = None
-_LOCK = threading.Lock()
+_LOCAL = threading.local()
 
 EDU_MAP: dict[str, list[str]] = {
     "고졸이하": ["초등학교", "중학교", "고등학교"],
@@ -14,7 +13,7 @@ EDU_MAP: dict[str, list[str]] = {
 }
 
 AGE_BUCKET_MAP: dict[str, tuple[int, int]] = {
-    "10~20대": (19, 29),
+    "10~20대": (10, 29),
     "30대":    (30, 39),
     "40대":    (40, 49),
     "50대":    (50, 59),
@@ -23,12 +22,9 @@ AGE_BUCKET_MAP: dict[str, tuple[int, int]] = {
 
 
 def _conn() -> duckdb.DuckDBPyConnection:
-    global _CONN
-    if _CONN is None:
-        with _LOCK:
-            if _CONN is None:
-                _CONN = duckdb.connect(database=":memory:", read_only=False)
-    return _CONN
+    if not hasattr(_LOCAL, "conn") or _LOCAL.conn is None:
+        _LOCAL.conn = duckdb.connect(database=":memory:", read_only=False)
+    return _LOCAL.conn
 
 
 def build_where_clause(
@@ -43,6 +39,8 @@ def build_where_clause(
 ) -> tuple[str, list]:
     if not age_buckets:
         raise ValueError("age_buckets는 최소 1개 필요")
+    if not education_levels:
+        raise ValueError("education_levels는 최소 1개 필요")
 
     parts: list[str] = []
     params: list = []
@@ -107,6 +105,6 @@ def query_sample(where: str, params: list, n: int, total: int) -> list[dict]:
         )
     sql = f"SELECT {_SELECT_COLS} FROM '{_PARQUET}' WHERE {where}"
     if total > n:
-        sql += f" USING SAMPLE {n} ROWS REPEATABLE(42)"
+        sql += f" USING SAMPLE reservoir({n} ROWS) REPEATABLE (42)"
     res = _conn().execute(sql, params)
     return [dict(zip(res.columns, row)) for row in res.fetchall()]

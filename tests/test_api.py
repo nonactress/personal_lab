@@ -101,3 +101,61 @@ def test_analyze_invalid_filter_params():
         files={"files": ("home.png", FAKE_PNG, "image/png")},
     )
     assert resp.status_code == 400
+
+
+from src.backend.api import app as _app
+_validator_client = TestClient(_app, raise_server_exceptions=False)
+
+
+def test_build_cast_잘못된_sex_거부():
+    res = _validator_client.post("/build-cast", json={
+        "age_buckets": ["30대"],
+        "education_levels": ["대졸"],
+        "sex": "외계인",
+    })
+    assert res.status_code == 422
+
+
+def test_build_cast_잘못된_age_bucket_거부():
+    res = _validator_client.post("/build-cast", json={
+        "age_buckets": ["100대"],
+        "education_levels": ["대졸"],
+    })
+    assert res.status_code == 422
+
+
+def test_build_cast_잘못된_education_level_거부():
+    res = _validator_client.post("/build-cast", json={
+        "age_buckets": ["30대"],
+        "education_levels": ["비전공자"],
+    })
+    assert res.status_code == 422
+
+
+def test_build_cast_education_levels_빈리스트_거부():
+    res = _validator_client.post("/build-cast", json={
+        "age_buckets": ["30대"],
+        "education_levels": [],
+    })
+    assert res.status_code == 422
+
+
+def test_build_cast_응답에_simulation_n_포함(monkeypatch):
+    """build-cast 응답에 선택한 n값이 포함되어야 함"""
+    import src.core.db as db_module
+
+    monkeypatch.setattr(db_module, "query_count", lambda w, p: 500)
+    monkeypatch.setattr(db_module, "query_sample", lambda w, p, n, total: [
+        {"age": 32, "sex": "남자", "occupation": "개발자", "province": "서울",
+         "education_level": "4년제 대학교", "persona": "테스트", "professional_persona": "",
+         "hobbies_and_interests": "", "skills_and_expertise": "", "cultural_background": ""}
+    ] * 3)
+
+    res = _validator_client.post("/build-cast", json={
+        "age_buckets": ["30대"],
+        "education_levels": ["대졸"],
+        "n": 200,
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["simulation_n"] == 200

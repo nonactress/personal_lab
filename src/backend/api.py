@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -18,6 +18,10 @@ load_dotenv()
 app = FastAPI(title="PersonaLab API")
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+_VALID_SEX = {"모두", "남자", "여자"}
+_VALID_AGE_BUCKETS = {"10~20대", "30대", "40대", "50대", "60대+"}
+_VALID_EDU_LEVELS = {"고졸이하", "전문대", "대졸", "대학원"}
 
 
 def _groq_client() -> OpenAI:
@@ -37,6 +41,33 @@ class FilterRequest(BaseModel):
     skills_kw: str = ""
     cultural_kw: str = ""
     n: int = 100
+
+    @field_validator("sex")
+    @classmethod
+    def validate_sex(cls, v: str) -> str:
+        if v not in _VALID_SEX:
+            raise ValueError(f"sex는 {_VALID_SEX} 중 하나여야 합니다. 입력값: {v!r}")
+        return v
+
+    @field_validator("age_buckets")
+    @classmethod
+    def validate_age_buckets(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("age_buckets는 최소 1개 필요")
+        invalid = [x for x in v if x not in _VALID_AGE_BUCKETS]
+        if invalid:
+            raise ValueError(f"유효하지 않은 age_bucket: {invalid}. 허용값: {sorted(_VALID_AGE_BUCKETS)}")
+        return v
+
+    @field_validator("education_levels")
+    @classmethod
+    def validate_education_levels(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("education_levels는 최소 1개 필요")
+        invalid = [x for x in v if x not in _VALID_EDU_LEVELS]
+        if invalid:
+            raise ValueError(f"유효하지 않은 education_level: {invalid}. 허용값: {sorted(_VALID_EDU_LEVELS)}")
+        return v
 
 
 @app.get("/health")
@@ -62,6 +93,7 @@ async def build_cast(req: FilterRequest):
         return {
             "total_count": total,
             "preview_personas": preview[:3],
+            "simulation_n": req.n,
         }
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))

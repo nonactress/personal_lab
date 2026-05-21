@@ -1,5 +1,5 @@
 """
-nonactress/Nemotron-Personas-Korea-bucket -> data/nemotron_full.parquet
+nvidia/Nemotron-Personas-Korea -> data/nemotron_full.parquet
 실행: python scripts/download_dataset.py
 소요: 수 분 (HF_TOKEN 필요)
 """
@@ -24,7 +24,7 @@ print("데이터셋 로드 중…")
 from datasets import load_dataset
 
 ds = load_dataset(
-    "nonactress/Nemotron-Personas-Korea-bucket",
+    "nvidia/Nemotron-Personas-Korea",
     split="train",
     token=token,
 )

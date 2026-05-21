@@ -156,7 +156,7 @@ def _generate_fix_prompt(element: str, reason: str) -> str:
     )
 
 
-def _score_screen(results: list, weights: list) -> dict:
+def _score_screen(results: list, weights: list, ui_map: dict | None = None) -> dict:
     if not results:
         return {
             "friction_rate": 0.0,
@@ -164,6 +164,7 @@ def _score_screen(results: list, weights: list) -> dict:
             "think_aloud": "",
             "issues": [],
             "fix_prompts": [],
+            "element_positions": {},
         }
 
     total_weight = sum(weights) or 1.0
@@ -177,12 +178,21 @@ def _score_screen(results: list, weights: list) -> dict:
         _generate_fix_prompt(iss["element"], iss["reason"]) for iss in issues[:3]
     ]
 
+    element_positions: dict = {}
+    if ui_map:
+        for comp in ui_map.get("components", []):
+            label = comp.get("label")
+            bbox = comp.get("bbox")
+            if label and bbox and len(bbox) == 4:
+                element_positions[label] = bbox
+
     return {
         "friction_rate": friction_rate,
         "risk_level": _risk_from_rate(friction_rate),
         "think_aloud": _pick_think_aloud(results),
         "issues": issues,
         "fix_prompts": fix_prompts,
+        "element_positions": element_positions,
     }
 
 
@@ -190,9 +200,14 @@ def build_scorer_output_v2(
     per_screen_results: dict,
     per_screen_weights: dict,
     flow_edges: list,
+    ui_maps: dict | None = None,
 ) -> dict:
     per_screen = {
-        screen: _score_screen(results, per_screen_weights.get(screen, []))
+        screen: _score_screen(
+            results,
+            per_screen_weights.get(screen, []),
+            ui_maps.get(screen) if ui_maps else None,
+        )
         for screen, results in per_screen_results.items()
     }
 

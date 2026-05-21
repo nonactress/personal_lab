@@ -42,6 +42,7 @@ interface ResultNodeData extends Record<string, unknown> {
   label: string
   objectUrl: string
   screenData?: PerScreenResult
+  onThumbnailClick?: (name: string) => void
 }
 
 function ResultNode({ data, selected }: NodeProps) {
@@ -49,6 +50,7 @@ function ResultNode({ data, selected }: NodeProps) {
   const risk = d.screenData?.risk_level ?? 'ok'
   const frictionPct = Math.round((d.screenData?.friction_rate ?? 0) * 100)
   const border = RISK_BORDER[risk]
+  const issueCount = d.screenData?.issues?.length ?? 0
 
   return (
     <div
@@ -67,7 +69,11 @@ function ResultNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0 !pointer-events-none" />
 
       {/* Thumbnail + overlay */}
-      <div className="relative" style={{ height: 120 }}>
+      <div
+        className="relative group"
+        style={{ height: 120, cursor: 'zoom-in' }}
+        onClick={() => d.onThumbnailClick?.(d.label)}
+      >
         {d.objectUrl ? (
           <img
             src={d.objectUrl}
@@ -82,11 +88,23 @@ function ResultNode({ data, selected }: NodeProps) {
         )}
         {/* Color tint overlay */}
         <div className="absolute inset-0" style={{ backgroundColor: RISK_BG[risk] }} />
+        {/* Hover zoom hint */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+          <span className="text-white text-[10px] font-medium bg-black/50 px-2 py-1 rounded">🔍 확대</span>
+        </div>
         {/* Severity dot */}
         <span
           className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-white shadow"
           style={{ backgroundColor: border }}
         />
+        {issueCount > 0 && (
+          <span
+            className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-white shadow-sm"
+            style={{ color: border }}
+          >
+            {issueCount}건
+          </span>
+        )}
         {selected && (
           <span
             className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-white shadow-sm"
@@ -104,6 +122,139 @@ function ResultNode({ data, selected }: NodeProps) {
       >
         <span className="font-mono text-[11px] truncate font-medium flex-1">{d.label}</span>
         <span className="text-[10px] font-bold tabular-nums ml-1">{frictionPct}%</span>
+      </div>
+    </div>
+  )
+}
+
+function dotColor(count: number) {
+  if (count >= 40) return '#ef4444'
+  if (count >= 15) return '#f59e0b'
+  return '#3b82f6'
+}
+
+function dotSize(count: number) {
+  return 8 + Math.min(count / 3, 14)
+}
+
+function ScreenZoomModal({
+  screenName,
+  objectUrl,
+  screenData,
+  onClose,
+}: {
+  screenName: string
+  objectUrl: string
+  screenData?: PerScreenResult
+  onClose: () => void
+}) {
+  const issues = screenData?.issues ?? []
+  const positions = screenData?.element_positions ?? {}
+  const totalAffected = issues.reduce((sum, iss) => sum + iss.count, 0)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden mx-4"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-semibold text-gray-900">{screenName}</span>
+            {totalAffected > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+                {totalAffected}명 이슈 감지
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 text-sm"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          {/* Screenshot with dot overlay */}
+          <div className="relative w-full">
+            <img
+              src={objectUrl}
+              alt={screenName}
+              className="w-full rounded-lg border border-gray-200 block"
+            />
+            {issues.map((iss) => {
+              const pos = positions[iss.element]
+              if (!pos) return null
+              const [x, y, w, h] = pos
+              const cx = x + w / 2
+              const cy = y + h / 2
+              const size = dotSize(iss.count)
+              const color = dotColor(iss.count)
+              return (
+                <div
+                  key={iss.element}
+                  title={`${iss.element}: ${iss.reason} (${iss.count}명)`}
+                  style={{
+                    position: 'absolute',
+                    left: `${cx}%`,
+                    top: `${cy}%`,
+                    width: size,
+                    height: size,
+                    borderRadius: '50%',
+                    backgroundColor: color,
+                    border: '2px solid white',
+                    boxShadow: `0 0 0 2px ${color}66, 0 2px 6px rgba(0,0,0,0.3)`,
+                    transform: 'translate(-50%, -50%)',
+                    cursor: 'default',
+                    zIndex: 10,
+                  }}
+                />
+              )
+            })}
+          </div>
+
+          {/* Issue list */}
+          {issues.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5">이슈 목록</div>
+              {issues.map((iss) => {
+                const color = dotColor(iss.count)
+                const hasPos = !!positions[iss.element]
+                return (
+                  <div
+                    key={iss.element}
+                    className="flex items-start gap-2.5 p-2.5 rounded-lg bg-gray-50 border border-gray-100"
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5 ring-2 ring-white shadow-sm"
+                      style={{ backgroundColor: color }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-semibold text-gray-800">{iss.element}</span>
+                        <span className="text-[10px] tabular-nums text-gray-500 bg-gray-200 px-1.5 rounded">{iss.count}명</span>
+                        {!hasPos && (
+                          <span className="text-[9px] text-gray-400 italic">위치 미감지</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">{iss.reason}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {issues.length === 0 && (
+            <div className="text-center py-8 text-sm text-gray-400">이 화면에서 감지된 이슈 없음</div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -166,6 +317,7 @@ export function ResultCanvasScreen() {
   const { result, reset, files, flowEdges } = useApp()
   const [selectedScreen, setSelectedScreen] = useState<string | null>(null)
   const [objectUrls, setObjectUrls] = useState<Record<string, string>>({})
+  const [zoomScreen, setZoomScreen] = useState<string | null>(null)
 
   const perScreen = result?.per_screen ?? {}
   const edgeDropout = result?.edge_dropout ?? {}
@@ -188,6 +340,7 @@ export function ResultCanvasScreen() {
         label: f.name,
         objectUrl: objectUrls[f.name] ?? '',
         screenData: perScreen[f.name],
+        onThumbnailClick: (name: string) => setZoomScreen(name),
       } as ResultNodeData,
       selectable: true,
       draggable: false,
@@ -231,8 +384,19 @@ export function ResultCanvasScreen() {
     overallRisk === 'warning'  ? 'bg-amber-500' :
     'bg-emerald-500'
 
+  const zoomScreenData = zoomScreen ? perScreen[zoomScreen] : undefined
+  const zoomObjectUrl = zoomScreen ? (objectUrls[zoomScreen] ?? '') : ''
+
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
+      {zoomScreen && (
+        <ScreenZoomModal
+          screenName={zoomScreen}
+          objectUrl={zoomObjectUrl}
+          screenData={zoomScreenData}
+          onClose={() => setZoomScreen(null)}
+        />
+      )}
       {/* Header */}
       <div className="px-5 py-3 border-b border-gray-200 flex items-center gap-3 flex-shrink-0 bg-white">
         <button
@@ -296,7 +460,7 @@ export function ResultCanvasScreen() {
           {/* Hint */}
           <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white shadow-card border border-gray-200 text-[10px] text-gray-500 font-mono whitespace-nowrap pointer-events-none">
             <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
-            <span>노드 클릭 → 좌측 패널 / 빈 공간 클릭 → 초기화</span>
+            <span>썸네일 클릭 → 확대+오버레이 / 라벨 클릭 → 좌측 패널</span>
           </div>
 
           {/* Legend */}

@@ -73,4 +73,5 @@ async def run_pipeline(
         per_screen_results=per_screen_results,
         per_screen_weights=screen_weights,
         flow_edges=flow_edges,
+        ui_maps=ui_maps,
     )

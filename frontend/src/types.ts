@@ -19,6 +19,7 @@ export interface PerScreenResult {
   think_aloud: string
   issues: PerScreenIssue[]
   fix_prompts: string[]
+  element_positions?: Record<string, [number, number, number, number]>
 }
 
 export type EdgeDropout = Record<string, number>

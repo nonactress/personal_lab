@@ -116,6 +116,12 @@ USING SAMPLE :n ROWS
 
 age_buckets가 복수일 경우 각 버킷의 범위를 OR로 결합.
 
+**SAMPLE 엣지 케이스 guard**: `total_count <= n` 이면 `USING SAMPLE` 절 생략, 전체 반환.
+```python
+if total_count > n:
+    sql += f" USING SAMPLE {n} ROWS"
+```
+
 ---
 
 ## 프론트엔드
@@ -178,7 +184,12 @@ Step 2 하단: "이 조건의 대상자 N명" 실시간 업데이트 (debounce 5
 | **100** | **±9.8%** ← 기본값 |
 | 200 | ±6.9% |
 
-기본 100명: Groq free tier(30 RPM) 기준 async 처리 ~10초 내 완료.
+기본 100명: Groq free tier(30 RPM) 기준 **약 3~4분** 소요.
+- 30 RPM → 100 calls = 200초 최소
+- ProgressScreen에 "예상 소요 시간 3~4분" 표시 필수
+- Groq paid / 대안 모델 전환은 추후 고려
+
+**Groq rate limit 대응 원칙**: n 줄이지 않는다 (통계 의미 손실). 대신 UX에서 소요 시간 정직하게 표시.
 
 ---
 

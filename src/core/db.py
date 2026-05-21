@@ -1,10 +1,9 @@
 import threading
 from pathlib import Path
-from typing import Optional
 import duckdb
 
 _PARQUET = Path("data/nemotron_full.parquet")
-_CONN: Optional[duckdb.DuckDBPyConnection] = None
+_CONN: duckdb.DuckDBPyConnection | None = None
 _LOCK = threading.Lock()
 
 EDU_MAP: dict[str, list[str]] = {
@@ -71,20 +70,15 @@ def build_where_clause(
         parts.append(f"province IN ({placeholders})")
         params.extend(provinces)
 
-    def _kw_clause(col: str, kw: str) -> Optional[str]:
-        if not kw.strip():
-            return None
-        safe = kw.strip().replace("'", "''")
-        return f"{col} ILIKE '%{safe}%'"
+    def _add_kw(col: str, kw: str) -> None:
+        if kw.strip():
+            parts.append(f"{col} ILIKE ?")
+            params.append(f"%{kw.strip()}%")
 
-    for clause in [
-        _kw_clause("occupation", occupation_kw),
-        _kw_clause("CAST(hobbies_and_interests_list AS VARCHAR)", hobbies_kw),
-        _kw_clause("skills_and_expertise", skills_kw),
-        _kw_clause("cultural_background", cultural_kw),
-    ]:
-        if clause:
-            parts.append(clause)
+    _add_kw("occupation", occupation_kw)
+    _add_kw("CAST(hobbies_and_interests_list AS VARCHAR)", hobbies_kw)
+    _add_kw("skills_and_expertise", skills_kw)
+    _add_kw("cultural_background", cultural_kw)
 
     return " AND ".join(parts), params
 
@@ -113,6 +107,6 @@ def query_sample(where: str, params: list, n: int, total: int) -> list[dict]:
         )
     sql = f"SELECT {_SELECT_COLS} FROM '{_PARQUET}' WHERE {where}"
     if total > n:
-        sql += f" USING SAMPLE {n} ROWS"
-    rows = _conn().execute(sql, params).df().to_dict(orient="records")
-    return rows
+        sql += f" USING SAMPLE {n} ROWS REPEATABLE(42)"
+    res = _conn().execute(sql, params)
+    return [dict(zip(res.columns, row)) for row in res.fetchall()]

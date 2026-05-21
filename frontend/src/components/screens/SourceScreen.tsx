@@ -16,8 +16,7 @@ export function SourceScreen() {
     sourceUrl, setSourceUrl,
     taskDesc, setTaskDesc,
     error, setError,
-    setSelectedAgeGroup, setSelectedSex, setSelectedEducation,
-    setSelectedRegion, setMatchedStrata, setTotalCount, setPreviewPersonas,
+    setTotalCount, setPreviewPersonas,
     setScreen,
   } = useApp()
 
@@ -49,11 +48,6 @@ export function SourceScreen() {
   function proceed() {
     if (!sourceReady) return
     setError('')
-    setSelectedAgeGroup('')
-    setSelectedSex('')
-    setSelectedEducation('')
-    setSelectedRegion('모두')
-    setMatchedStrata([])
     setTotalCount(0)
     setPreviewPersonas([])
     setScreen('target_select')

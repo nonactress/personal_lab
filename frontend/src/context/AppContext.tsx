@@ -1,8 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import type {
   AppContextValue, Screen, SourceMode, ResultSection,
-  AnalysisResult, PreviewPersona, FlowEdge,
+  AnalysisResult, PreviewPersona, FlowEdge, FilterParams,
 } from '@/types'
+import { DEFAULT_FILTER_PARAMS } from '@/types'
 
 const AppContext = createContext<AppContextValue | null>(null)
 
@@ -15,12 +16,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sourceUrl, setSourceUrl]             = useState('')
   const [taskDesc, setTaskDesc]               = useState('')
   const [flowEdges, setFlowEdges]             = useState<FlowEdge[]>([])
-  const [selectedAgeGroup, setSelectedAgeGroup] = useState('')
-  const [selectedSex, setSelectedSex]         = useState('')
-  const [selectedEducation, setSelectedEducation] = useState('')
-  const [selectedRegion, setSelectedRegion]   = useState('모두')
-  const [selectedOccupation, setSelectedOccupation] = useState('')
-  const [matchedStrata, setMatchedStrata]     = useState<string[]>([])
+  const [filterParams, setFilterParams]       = useState<FilterParams>(DEFAULT_FILTER_PARAMS)
+  const [simulationN, setSimulationN]         = useState<50 | 100 | 200>(100)
   const [totalCount, setTotalCount]           = useState(0)
   const [previewPersonas, setPreviewPersonas] = useState<PreviewPersona[]>([])
   const [castLoading, setCastLoading]         = useState(false)
@@ -38,12 +35,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSourceUrl('')
     setTaskDesc('')
     setFlowEdges([])
-    setSelectedAgeGroup('')
-    setSelectedSex('')
-    setSelectedEducation('')
-    setSelectedRegion('모두')
-    setSelectedOccupation('')
-    setMatchedStrata([])
+    setFilterParams(DEFAULT_FILTER_PARAMS)
+    setSimulationN(100)
     setTotalCount(0)
     setPreviewPersonas([])
     setCastLoading(false)
@@ -63,12 +56,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sourceUrl, setSourceUrl,
       taskDesc, setTaskDesc,
       flowEdges, setFlowEdges,
-      selectedAgeGroup, setSelectedAgeGroup,
-      selectedSex, setSelectedSex,
-      selectedEducation, setSelectedEducation,
-      selectedRegion, setSelectedRegion,
-      selectedOccupation, setSelectedOccupation,
-      matchedStrata, setMatchedStrata,
+      filterParams, setFilterParams,
+      simulationN, setSimulationN,
       totalCount, setTotalCount,
       previewPersonas, setPreviewPersonas,
       castLoading, setCastLoading,

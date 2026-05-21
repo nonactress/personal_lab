@@ -107,4 +107,5 @@ def query_sample(where: str, params: list, n: int, total: int) -> list[dict]:
     if total > n:
         sql += f" USING SAMPLE reservoir({n} ROWS) REPEATABLE (42)"
     res = _conn().execute(sql, params)
-    return [dict(zip(res.columns, row)) for row in res.fetchall()]
+    col_names = [d[0] for d in res.description]
+    return [dict(zip(col_names, row)) for row in res.fetchall()]

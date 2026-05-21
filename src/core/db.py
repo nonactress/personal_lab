@@ -103,9 +103,7 @@ def query_sample(where: str, params: list, n: int, total: int) -> list[dict]:
         raise FileNotFoundError(
             f"{_PARQUET} 없음. scripts/download_dataset.py 먼저 실행하세요."
         )
-    sql = f"SELECT {_SELECT_COLS} FROM '{_PARQUET}' WHERE {where}"
-    if total > n:
-        sql += f" USING SAMPLE reservoir({n} ROWS) REPEATABLE (42)"
+    sql = f"SELECT {_SELECT_COLS} FROM '{_PARQUET}' WHERE {where} ORDER BY random() LIMIT {n}"
     res = _conn().execute(sql, params)
     col_names = [d[0] for d in res.description]
     return [dict(zip(col_names, row)) for row in res.fetchall()]

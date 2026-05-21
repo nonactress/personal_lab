@@ -12,12 +12,11 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from src.core.logic import run_pipeline
+from src.core.db import build_where_clause, query_count, query_sample
 
 load_dotenv()
 app = FastAPI(title="PersonaLab API")
 
-_STRATA_PATH = Path("data/nemotron_strata.json")
-_METRO_PROVINCES = {"서울", "경기", "인천"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
@@ -28,22 +27,16 @@ def _groq_client() -> OpenAI:
     )
 
 
-def _load_strata_once() -> dict:
-    if not _STRATA_PATH.exists():
-        raise HTTPException(
-            status_code=503,
-            detail="strata 데이터가 없습니다. scripts/build_strata.py를 먼저 실행하세요.",
-        )
-    with open(_STRATA_PATH, encoding="utf-8") as f:
-        return json.load(f)
-
-
-class BuildCastRequest(BaseModel):
-    age_group: str
-    sex: str
-    education: str
-    region: str = "모두"
-    occupation: str = "모두"
+class FilterRequest(BaseModel):
+    age_buckets: list[str]
+    sex: str = "모두"
+    education_levels: list[str]
+    provinces: list[str] = []
+    occupation_kw: str = ""
+    hobbies_kw: str = ""
+    skills_kw: str = ""
+    cultural_kw: str = ""
+    n: int = 100
 
 
 @app.get("/health")
@@ -52,69 +45,28 @@ def health_check():
 
 
 @app.post("/build-cast")
-async def build_cast(req: BuildCastRequest):
+async def build_cast(req: FilterRequest):
     try:
-        data = _load_strata_once()
-        strata = data["strata"]
-        matched_keys = []
-        total_count = 0
-        preview_personas = []
-
-        for key, stratum in strata.items():
-            k = stratum["keys"]
-            if k["age_group"] != req.age_group:
-                continue
-            if k["education"] != req.education:
-                continue
-            if req.sex != "모두" and k["sex"] != req.sex:
-                continue
-
-            count = stratum["count"]
-            personas = stratum["personas"]
-
-            if req.region == "수도권" and personas:
-                metro = [p for p in personas if p["province"] in _METRO_PROVINCES]
-                count = int(count * len(metro) / len(personas)) if metro else 0
-                personas = metro
-            elif req.region == "지방" and personas:
-                non_metro = [p for p in personas if p["province"] not in _METRO_PROVINCES]
-                count = int(count * len(non_metro) / len(personas)) if non_metro else 0
-                personas = non_metro
-
-            if req.occupation != "모두" and personas:
-                kw = req.occupation.strip().lower()
-                filtered = [p for p in personas if kw in p.get("occupation", "").lower()]
-                count = int(count * len(filtered) / len(personas)) if filtered else 0
-                personas = filtered
-
-            if count == 0:
-                continue
-
-            matched_keys.append(key)
-            total_count += count
-
-            for p in personas[:3]:
-                if len(preview_personas) >= 3:
-                    break
-                preview_personas.append({
-                    "age": p["age"],
-                    "occupation": p["occupation"],
-                    "province": p["province"],
-                    "persona": p.get("persona", ""),
-                    "professional_persona": p.get("professional_persona", ""),
-                    "hobbies_and_interests": p.get("hobbies_and_interests", ""),
-                    "cultural_background": p.get("cultural_background", ""),
-                    "skills_and_expertise": p.get("skills_and_expertise", ""),
-                })
-
+        where, params = build_where_clause(
+            age_buckets=req.age_buckets,
+            sex=req.sex,
+            education_levels=req.education_levels,
+            provinces=req.provinces,
+            occupation_kw=req.occupation_kw,
+            hobbies_kw=req.hobbies_kw,
+            skills_kw=req.skills_kw,
+            cultural_kw=req.cultural_kw,
+        )
+        total = query_count(where, params)
+        preview = query_sample(where, params, n=3, total=total)
         return {
-            "matched_strata": matched_keys,
-            "total_count": total_count,
-            "preview_personas": preview_personas[:3],
+            "total_count": total,
+            "preview_personas": preview[:3],
         }
-
-    except HTTPException:
-        raise
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"build-cast error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -123,17 +75,17 @@ async def build_cast(req: BuildCastRequest):
 @app.post("/analyze")
 async def analyze_endpoint(
     files: Optional[List[UploadFile]] = File(default=None),
-    strata_keys: str = Form(...),
+    filter_params: str = Form(...),
     task: str = Form(default="서비스 탐색하기"),
     flow_edges: str = Form(default="[]"),
 ):
     try:
         try:
-            keys: list[str] = json.loads(strata_keys)
+            fp: dict = json.loads(filter_params)
         except (json.JSONDecodeError, TypeError):
-            raise HTTPException(status_code=400, detail="strata_keys가 유효한 JSON 형식이 아닙니다.")
-        if not keys:
-            raise HTTPException(status_code=400, detail="strata_keys가 비어 있습니다.")
+            raise HTTPException(status_code=400, detail="filter_params가 유효한 JSON이 아닙니다.")
+        if not fp.get("age_buckets") or not fp.get("education_levels"):
+            raise HTTPException(status_code=400, detail="age_buckets, education_levels 필수")
 
         try:
             edges: list[dict] = json.loads(flow_edges)
@@ -162,7 +114,7 @@ async def analyze_endpoint(
                 detail="분석 가능한 이미지가 없습니다. .png/.jpg/.webp 파일을 업로드하세요.",
             )
 
-        result = await run_pipeline(images, edges, keys, task)
+        result = await run_pipeline(images, edges, fp, task)
         return result
 
     except HTTPException:

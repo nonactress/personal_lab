@@ -9,6 +9,8 @@ build/
 .venv/
 venv/
 data/nemotron_strata.json
+data/nemotron_full.parquet
+data/nemotron_full.parquet.tmp
 
 # frontend
 frontend/node_modules/

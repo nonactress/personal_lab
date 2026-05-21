@@ -23,6 +23,28 @@ export interface PerScreenResult {
 
 export type EdgeDropout = Record<string, number>
 
+export interface FilterParams {
+  age_buckets: string[]
+  sex: string
+  education_levels: string[]
+  provinces: string[]
+  occupation_kw: string
+  hobbies_kw: string
+  skills_kw: string
+  cultural_kw: string
+}
+
+export const DEFAULT_FILTER_PARAMS: FilterParams = {
+  age_buckets: [],
+  sex: '모두',
+  education_levels: [],
+  provinces: [],
+  occupation_kw: '',
+  hobbies_kw: '',
+  skills_kw: '',
+  cultural_kw: '',
+}
+
 export interface PreviewPersona {
   age: number
   occupation: string
@@ -94,18 +116,10 @@ export interface AppContextValue {
   flowEdges: FlowEdge[]
   setFlowEdges: (v: FlowEdge[]) => void
 
-  selectedAgeGroup: string
-  setSelectedAgeGroup: (v: string) => void
-  selectedSex: string
-  setSelectedSex: (v: string) => void
-  selectedEducation: string
-  setSelectedEducation: (v: string) => void
-  selectedRegion: string
-  setSelectedRegion: (v: string) => void
-  selectedOccupation: string
-  setSelectedOccupation: (v: string) => void
-  matchedStrata: string[]
-  setMatchedStrata: (v: string[]) => void
+  filterParams: FilterParams
+  setFilterParams: (v: FilterParams) => void
+  simulationN: 50 | 100 | 200
+  setSimulationN: (v: 50 | 100 | 200) => void
   totalCount: number
   setTotalCount: (v: number) => void
   previewPersonas: PreviewPersona[]

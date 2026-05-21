@@ -1,20 +1,11 @@
-import type { AnalysisResult, PreviewPersona, FlowEdge } from '@/types'
-
-export interface BuildCastParams {
-  age_group: string
-  sex: string
-  education: string
-  region: string
-  occupation?: string
-}
+import type { AnalysisResult, PreviewPersona, FlowEdge, FilterParams } from '@/types'
 
 export interface BuildCastResponse {
-  matched_strata: string[]
   total_count: number
   preview_personas: PreviewPersona[]
 }
 
-export async function buildCast(params: BuildCastParams): Promise<BuildCastResponse> {
+export async function buildCast(params: FilterParams): Promise<BuildCastResponse> {
   const res = await fetch('/build-cast', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28,7 +19,8 @@ export async function buildCast(params: BuildCastParams): Promise<BuildCastRespo
 }
 
 export interface AnalyzeParams {
-  strataKeys: string[]
+  filterParams: FilterParams
+  n: 50 | 100 | 200
   task: string
   files?: File[]
   flowEdges?: FlowEdge[]
@@ -36,7 +28,7 @@ export interface AnalyzeParams {
 
 export async function analyze(params: AnalyzeParams): Promise<AnalysisResult> {
   const formData = new FormData()
-  formData.append('strata_keys', JSON.stringify(params.strataKeys))
+  formData.append('filter_params', JSON.stringify({ ...params.filterParams, n: params.n }))
   formData.append('task', params.task || '서비스 탐색하기')
   formData.append('flow_edges', JSON.stringify(params.flowEdges ?? []))
   if (params.files) {

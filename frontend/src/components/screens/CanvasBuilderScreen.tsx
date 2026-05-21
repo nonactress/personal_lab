@@ -114,8 +114,7 @@ export function CanvasBuilderScreen() {
     taskDesc, setTaskDesc,
     setFlowEdges,
     setScreen,
-    setSelectedAgeGroup, setSelectedSex, setSelectedEducation,
-    setSelectedRegion, setMatchedStrata, setTotalCount, setPreviewPersonas,
+    setTotalCount, setPreviewPersonas,
     setError,
   } = useApp()
 
@@ -210,11 +209,6 @@ export function CanvasBuilderScreen() {
   function proceed() {
     if (!canProceed) return
     setError('')
-    setSelectedAgeGroup('')
-    setSelectedSex('')
-    setSelectedEducation('')
-    setSelectedRegion('모두')
-    setMatchedStrata([])
     setTotalCount(0)
     setPreviewPersonas([])
     setScreen('target_select')
